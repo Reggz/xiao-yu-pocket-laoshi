@@ -58,6 +58,11 @@ Each phase is ~15–30 minutes of agent work and ends with a concrete, reviewabl
 - Add disambiguation state + inline keyboard buttons.
 - Output: candidate selection flow test.
 
+## Phase 6D: Close-Match Correction
+- Add phonetic similarity correction before disambiguation.
+- Use confusion groups and edit-distance checks against curriculum vocab.
+- Output: correction suggestion tests.
+
 ## Phase 7A: Template Response Engine
 - Template-based replies within level.
 - Output: deterministic response tests.
@@ -107,10 +112,16 @@ Each phase is ~15–30 minutes of agent work and ends with a concrete, reviewabl
 - Emit logs with trace IDs.
 - Output: log sample.
 
-## Phase 12: Integration Pass
+## Phase 12A: LLM Integration (Real Provider)
+- Wire adapter to chosen LLM provider.
+- Confirm timeouts and error handling.
+- Output: real LLM call path tested.
+
+## Phase 12B: Integration Pass
 - Wire components end-to-end.
 - Output: message in -> response out.
 
 ## Phase 13: Deployment Prep
 - Vercel config + cron strategy.
 - Output: deployable build.
+- Reference: docs/deployment_plan.md

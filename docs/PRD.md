@@ -12,7 +12,7 @@ Build a Telegram-based chatbot for English speakers learning Mandarin. The produ
 - Keep sessions short, like a real micro conversation (few back-and-forth turns).
 
 ## 2.1 Brand and Voice
-- Brand identity, tone, and positioning are defined in `/Users/reginald/Documents/Xiao Yu - Pocket Lao Shi/brand.md`.
+- Brand identity, tone, and positioning are defined in `/Users/reginald/Documents/Xiao Yu - Pocket Lao Shi/docs/brand.md`.
 - Levels are internal only; user-facing copy avoids technical level labels.
 
 ## 3. Non-Goals (v1)
@@ -63,13 +63,16 @@ Scoring and placement (example): 4-5 correct unlock A2 content.
 - Help phrases such as "please explain" or "我不知道" trigger clarification.
 
 ## 6. Input Normalization and Error Recovery
+- Add close-match correction layer before disambiguation.
 - Accepted input formats:
   - Pinyin with tones (e.g., "wo3 jiao4 xiao3 ling2")
   - Pinyin without tones (e.g., "wo jiao xiao ling")
+  - Pinyin with tone marks (e.g., "Nǐ hǎo")
   - Simplified characters (e.g., "我叫小玲")
   - Mixed Chinese + English (e.g., "我叫 Sarah")
 - System behavior:
   - Normalize pinyin without tones into candidate pinyin with tones.
+  - Track `missingTone` when pinyin lacks tones to guide downstream correction.
   - Map pinyin to candidate characters using curriculum vocabulary and common frequency lists.
   - If confidence is low, present 2-3 candidate interpretations instead of forcing a single correction.
   - Present candidates via Telegram inline buttons to avoid numeric replies being mis-normalized.
@@ -123,13 +126,14 @@ Note: The bot avoids advanced vocabulary and past tense patterns, keeping A0 out
 - Track latency per response and drill completion rates.
 - Log safety events (blocked content) and correction events.
 - Use request/response IDs for traceability in logs.
-- Observability reference: `/Users/reginald/Documents/Xiao Yu - Pocket Lao Shi/observability.md`
+- Observability reference: `/Users/reginald/Documents/Xiao Yu - Pocket Lao Shi/docs/observability.md`
 
 ## 10. Key Features
 Practice Modes: micro-drill MCQ, fill in the blank, tone selection, free-text mini conversation.
 Mode Navigation: menu to enter/exit modes at any time and access settings/upgrade.
 Learning Engine: level-gated responses, Level + 1 exposure with auto-hints, spaced repetition scheduling, exploratory vocab curation, mode-specific scoring weights.
 Grammar Guardrails: grammar_patterns whitelist per level, avoid complex conjunctions in LLM prompts.
+- Grammar tiers: critical, core, advanced. Allow at most one non-critical grammar per response.
 Topic Routing: unit-level topic tags inherited by items/templates, configurable topic bias ratio, fallback to general content when topic pool is too small.
 Feedback and Hints: auto-hint for new items, correction hints with short explanations, session summaries and progress tracking.
 Response Strategy: hybrid response engine (template-first, LLM fallback), caching with validation for stable prompts.
@@ -137,6 +141,16 @@ Response Context: use last 3-5 interactions with a strict token cap; fall back t
 Scheduling: daily micro-drills, event-based pings, configurable session length, three daily session windows, default check-in times.
 Onboarding: optional placement micro-challenges to set starting level.
 Topic Learning: user-selected topics (1-3) to prioritize drills and conversation templates.
+
+## 10.1 LLM Provider Switching (Required)
+- LLM integration must be provider-switchable via configuration.
+- Support environment variables:
+  - `LLM_PROVIDER` (default: `openai`)
+  - `LLM_MODEL` (default: `gpt-4.1-mini`)
+  - `LLM_BASE_URL` (optional override)
+  - `LLM_API_KEY`
+- Use an adapter factory so we can add new providers without changing core logic.
+- Allow admin override to disable caps for exploratory testing: `LLM_DISABLE_CAPS=true`.
 
 ## 11. Success Metrics
 - 7-day retention >= 25%.
@@ -146,6 +160,8 @@ Topic Learning: user-selected topics (1-3) to prioritize drills and conversation
 
 ## 12. Content Strategy
 - Structured curriculum catalog as source of truth.
+- Source of truth is docs/curriculum_seed.md in v1 (manual updates).
+- Later migrate to DB-backed curriculum with admin import tool.
 - A0/A1 units with curated vocab, phrases, and templates.
 - LLM used for paraphrase and gentle correction within allowed content.
 
@@ -205,6 +221,7 @@ Topic Learning: user-selected topics (1-3) to prioritize drills and conversation
 
 ### Phase 3: Database Schema (Core)
 - Create schema for users, user_settings, topics, user_topics, interactions.
+- Add exploratory_items usage_count and last_triggered_at fields.
 - Output: DB migration files and basic schema tests.
 
 ### Phase 4: Curriculum Loader
@@ -220,11 +237,15 @@ Topic Learning: user-selected topics (1-3) to prioritize drills and conversation
 ### Phase 6: Input Normalization Pipeline
 - Detect input type (pinyin with/without tone, hanzi, mixed).
 - Normalize to canonical form.
+- Add disambiguation state and inline keyboard candidate selection.
 - Output: tests for normalization and correction suggestions.
 
 ### Phase 7: Response Engine (Template + LLM Interface)
 - Template-based replies within level.
 - LLM adapter interface with timeout handling and output validation.
+- Enforce grammar_patterns whitelist and avoid complex conjunctions.
+- Add conversation buffer (last 3-5 interactions) with token budget.
+- Throttle LLM usage and fall back to templates when over budget.
 - Output: deterministic replies + mocked LLM tests.
 
 ### Phase 8: Auto-Hint and Correction
@@ -246,10 +267,15 @@ Topic Learning: user-selected topics (1-3) to prioritize drills and conversation
 - Emit observability logs with trace IDs.
 - Output: summary output and log samples.
 
-### Phase 12: Integration Pass
-- Wire all components together.
+### Phase 12A: LLM Integration (Real Provider)
+- Wire adapter to chosen LLM provider.
+- Confirm timeouts and error handling.
+- Output: real LLM call path tested.
+
+### Phase 12B: Integration Pass
+- Wire all components together (LLM enabled).
 - End-to-end test: message in -> response out.
-- Output: basic working loop.
+- Output: basic working loop with LLM.
 
 ### Phase 13: Deployment Prep
 - Vercel config and cron strategy.

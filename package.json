@@ -1,0 +1,25 @@
+{
+  "name": "xiao-yu-pocket-laoshi",
+  "private": true,
+  "version": "0.0.2",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node dist/index.js",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run --config vitest.config.ts",
+    "input-test": "node dist/input/manual.js",
+    "input-cli": "node dist/input/cli.js"
+  },
+  "dependencies": {
+    "grammy": "^1.20.3",
+    "pg": "^8.11.5",
+    "ts-fsrs": "^5.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "@types/pg": "^8.10.5",
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.0"
+  }
+}

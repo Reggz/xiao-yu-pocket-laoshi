@@ -69,6 +69,9 @@
 - pinyin
 - english_gloss
 - tags (json)
+- grammar_patterns (json)
+- unit_grammar (json)
+- grammar_tier (text)
 
 ### curriculum_templates
 - id
@@ -118,6 +121,7 @@
 - input_text_raw
 - input_text_normalized
 - input_pinyin_normalized
+- missing_tone (boolean)
 - output_text
 - created_at
 

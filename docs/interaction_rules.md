@@ -26,6 +26,7 @@
 ## 3. Response Generation
 - Core response must only use allowed vocab/grammar for the user's level.
 - Enforce grammar_patterns whitelist per level; no complex conjunctions.
+- Grammar tiers: critical, core, advanced. Allow at most one non-critical grammar per response.
 - LLM may paraphrase but cannot introduce out-of-level items.
 - Keep responses short and conversational.
 - LLM context includes the last 3-5 interactions with a strict token cap.

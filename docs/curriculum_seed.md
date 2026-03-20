@@ -1,11 +1,14 @@
 # Curriculum Seed (A0-A1)
 
 ## Format Guidelines
-- Each Unit includes: title, topic tag, vocab list, phrases, templates.
+- Each Unit includes: title, topic tag, vocab list, phrases, templates, grammar.
 - Use simplified characters, pinyin, and English gloss.
 - Topic tags should be coarse (e.g., Self-Intro, Food/Drink, Daily Routine, Numbers/Quantity, Location, Work, Small Talk).
+- Grammar lines include a tier: critical | core | advanced.
+- This file is the source for candidate resolution. The input engine builds a pinyin→hanzi index from vocab/phrases/templates here.
 
 ## Unit 1: Greetings (Topic: Self-Intro)
+Level: A0
 Vocab:
 - 你好 | ni3 hao3 | hello
 - 早上好 | zao3 shang4 hao3 | good morning
@@ -23,7 +26,12 @@ Templates:
 - 你好！你好吗？ | ni3 hao3! ni3 hao3 ma? | hello! how are you?
 - 谢谢。你呢？ | xie4 xie4. ni3 ne? | thanks. and you?
 
+Grammar:
+- 吗 问句 | ma question | add 吗 to make a question | critical
+- A-not-A | A-not-A question | question using A-not-A pattern | core
+
 ## Unit 2: Self-Introduction (Topic: Self-Intro)
+Level: A0
 Vocab:
 - 我 | wo3 | I
 - 你 | ni3 | you
@@ -40,7 +48,12 @@ Templates:
 - 你好，我叫... | ni3 hao3, wo3 jiao4 ... | hello, my name is ...
 - 你呢？ | ni3 ne? | and you?
 
+Grammar:
+- SVO | SVO basic order | subject-verb-object | critical
+- 名词 + 叫 | name construction | use 叫 for names | core
+
 ## Unit 3: Food and Drink (Topic: Food/Drink)
+Level: A0
 Vocab:
 - 吃 | chi1 | eat
 - 喝 | he1 | drink
@@ -59,7 +72,12 @@ Templates:
 - 你今天吃什么？ | ni3 jin1 tian1 chi1 shen2 me? | what do you eat today?
 - 很好。你喝什么？ | hen3 hao3. ni3 he1 shen2 me? | nice. what do you drink?
 
+Grammar:
+- 动词 + 什么 | verb + what | asking objects | core
+- 我 + 动词 | I + verb | simple action | critical
+
 ## Unit 4: Time and Routine (Topic: Daily Routine)
+Level: A0
 Vocab:
 - 今天 | jin1 tian1 | today
 - 明天 | ming2 tian1 | tomorrow
@@ -78,7 +96,12 @@ Templates:
 - 今天你做什么？ | jin1 tian1 ni3 zuo4 shen2 me? | what do you do today?
 - 你今天去哪里？ | ni3 jin1 tian1 qu4 na3 li3? | where are you going today?
 
+Grammar:
+- 时间 + 动作 | time + action | time before verb | core
+- 去 + 地点 | go to location | basic direction | core
+
 ## Unit 5: Numbers and Quantity (Topic: Numbers/Quantity)
+Level: A1
 Vocab:
 - 一 | yi1 | one
 - 二 | er4 | two
@@ -97,7 +120,12 @@ Templates:
 - 你有几个朋友？ | ni3 you3 ji3 ge peng2 you? | how many friends do you have?
 - 我有三个... | wo3 you3 san1 ge ... | I have three ...
 
+Grammar:
+- 数量 + 个 + 名词 | number + measure + noun | measure word rule | core
+- 有 + 名词 | have + noun | possession | core
+
 ## Unit 6: Location and Directions (Topic: Location)
+Level: A1
 Vocab:
 - 在 | zai4 | at/in
 - 这里 | zhe4 li3 | here
@@ -114,7 +142,12 @@ Templates:
 - 你要去哪里？ | ni3 yao4 qu4 na3 li3? | where do you want to go?
 - 我去... | wo3 qu4 ... | I go to ...
 
+Grammar:
+- 在 + 地点 | at + location | location marker | core
+- 去 + 地点 | go to location | direction | core
+
 ## Unit 7: Preferences (Topic: Daily Routine)
+Level: A1
 Vocab:
 - 喜欢 | xi3 huan1 | like
 - 不喜欢 | bu4 xi3 huan1 | dislike
@@ -129,7 +162,12 @@ Templates:
 - 你喜欢喝茶吗？ | ni3 xi3 huan1 he1 cha2 ma? | do you like drinking tea?
 - 我喜欢... | wo3 xi3 huan1 ... | I like ...
 
+Grammar:
+- 喜欢 + 名词 | like + noun | preference | core
+- 想/要 + 动词 | want to + verb | intention | core
+
 ## Unit 8: Basic Work (Topic: Work)
+Level: A1
 Vocab:
 - 工作 | gong1 zuo4 | work
 - 公司 | gong1 si1 | company
@@ -145,7 +183,12 @@ Templates:
 - 你是老师吗？ | ni3 shi4 lao3 shi1 ma? | are you a teacher?
 - 我是学生。 | wo3 shi4 xue2 sheng. | I am a student.
 
+Grammar:
+- 是 + 名词 | is + noun | identity | core
+- 做 + 工作 | do + work | job question | core
+
 ## Unit 9: Small Talk (Topic: Small Talk)
+Level: A1
 Vocab:
 - 天气 | tian1 qi4 | weather
 - 热 | re4 | hot
@@ -159,3 +202,7 @@ Phrases:
 Templates:
 - 今天天气怎么样？ | jin1 tian1 tian1 qi4 zen3 me yang4? | how is the weather today?
 - 今天很冷。 | jin1 tian1 hen3 leng3. | it is cold today.
+
+Grammar:
+- 很 + 形容词 | very + adjective | descriptive | core
+- 怎么样 | how is | asking state | core

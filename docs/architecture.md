@@ -16,6 +16,7 @@
 2. Curriculum Service
    - Stores units, vocab, grammar patterns, templates, and drills.
    - Stores grammar_patterns whitelist per level.
+   - Stores grammar tiers and non-critical limit.
    - Defines level constraints and prerequisites.
    - Stores topic tags for units and templates.
 
@@ -38,6 +39,9 @@
 
 7. Input Normalization Service
    - Detects input format (characters, pinyin with tones, pinyin without tones, mixed English).
+   - Builds candidate lists from curriculum index for disambiguation.
+   - Applies close-match correction before disambiguation.
+   - Tracks missingTone for tone-less pinyin inputs.
    - Converts to canonical representation (characters + pinyin).
    - Resolves ambiguous pinyin with curriculum context and common frequency lists.
    - Confidence Gate + Candidate Resolver: if confidence is low, return 2-3 candidate interpretations.
@@ -54,11 +58,20 @@
    - Generates end-of-session recap.
    - Updates mastery stats.
 
+## 2.1 LLM Provider Switching
+- LLM adapter factory chooses provider at runtime.
+- Environment configuration:
+  - `LLM_PROVIDER` (default: openai)
+  - `LLM_MODEL` (default: gpt-4.1-mini)
+  - `LLM_BASE_URL` (optional override)
+  - `LLM_API_KEY`
+- Admin override: `LLM_DISABLE_CAPS=true` disables throttling for exploratory testing.
+
 ## 3. Data Flow
 1. User sends message via Telegram.
 2. Channel Adapter sends message to Input Normalization Service.
 3. Input Normalization produces canonical form + correction suggestions.
-4. Response Engine queries Learner State for level and due items.
+4. Response Engine queries Learner State for level and due items (currently in-memory; DB-backed learner state pending).
 5. Response Engine queries Curriculum for allowed vocab and templates.
 6. If message includes unknown terms, Response Engine logs exploratory vocab and auto-hint.
 7. Response Engine returns a level-appropriate reply + optional hint.
@@ -80,9 +93,9 @@
 - Track cost per user per day.
 - Monitor drill completion rates and mastery progression.
 - Cache stable prompts and validate outputs against level constraints.
- - Track latency per response and per LLM call.
- - Log safety events (blocked content).
- - Maintain request/response IDs for traceability.
+- Track latency per response and per LLM call.
+- Log safety events (blocked content).
+- Maintain request/response IDs for traceability.
 
 ## 7. Extensibility
 - Add additional languages by creating new curriculum catalogs.
