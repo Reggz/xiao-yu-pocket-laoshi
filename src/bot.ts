@@ -35,6 +35,13 @@ const llmAdapter = (() => {
 
 export const bot = new Bot(config.telegramBotToken);
 
+let isInitialized = false;
+export async function ensureBotInit(): Promise<void> {
+  if (isInitialized) return;
+  await bot.init();
+  isInitialized = true;
+}
+
 function buildDisambKeyboard(candidates: string[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   candidates.slice(0, 3).forEach((c) => {

@@ -1,4 +1,4 @@
-import { bot } from "../src/bot";
+import { bot, ensureBotInit } from "../src/bot";
 import { IncomingMessage } from "http";
 
 async function readBody(req: IncomingMessage): Promise<any> {
@@ -23,6 +23,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    await ensureBotInit();
     const body = req.body ?? (await readBody(req));
     if (!body) {
       res.statusCode = 400;
