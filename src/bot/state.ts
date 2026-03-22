@@ -6,6 +6,13 @@ export type UserSettings = {
   topicBiasRatio: number;
 };
 
+export type DrillState = {
+  id: string;
+  prompt: string;
+  options: string[];
+  answer: string;
+};
+
 export type UserSessionState = {
   disambiguation?: DisambiguationState;
   buffer: InteractionSnippet[];
@@ -14,6 +21,7 @@ export type UserSessionState = {
   paused: boolean;
   lastOnboardingPromptAt?: number;
   lastPausedPromptAt?: number;
+  pendingDrill?: DrillState;
 };
 
 const state = new Map<string, UserSessionState>();
@@ -98,6 +106,7 @@ export function resetSession(userId: string): void {
   delete session.disambiguation;
   delete session.lastOnboardingPromptAt;
   delete session.lastPausedPromptAt;
+  delete session.pendingDrill;
 }
 
 export function shouldSendOnboardingPrompt(userId: string, nowMs: number, cooldownMs = 3000): boolean {
@@ -116,4 +125,13 @@ export function shouldSendPausedPrompt(userId: string, nowMs: number, cooldownMs
     return true;
   }
   return false;
+}
+
+export function setPendingDrill(userId: string, drill: DrillState | undefined): void {
+  const session = getSession(userId);
+  session.pendingDrill = drill;
+}
+
+export function getPendingDrill(userId: string): DrillState | undefined {
+  return getSession(userId).pendingDrill;
 }

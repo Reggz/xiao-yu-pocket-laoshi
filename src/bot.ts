@@ -10,12 +10,14 @@ import {
   getSession,
   getTopicBiasRatio,
   getTopics,
+  getPendingDrill,
   isOnboardingComplete,
   isPaused,
   resetSession,
   setDisambiguation,
   setOnboardingComplete,
   setPaused,
+  setPendingDrill,
   setTopicBiasRatio,
   setTopics,
   shouldSendOnboardingPrompt,
@@ -29,6 +31,7 @@ import { createLlmAdapter } from "./llm/factory";
 import { generateResponse } from "./response/engine";
 import { selectAllowedGrammar } from "./response/grammar";
 import { initBudget } from "./llm/manager";
+import { buildMicroDrill, buildToneDrill } from "./drills/quick";
 
 const config = loadConfig();
 const curriculum = loadCurriculumFromFile("docs/curriculum_seed.md");
@@ -61,6 +64,12 @@ function buildDisambKeyboard(candidates: string[]): InlineKeyboard {
   candidates.slice(0, 3).forEach((c) => {
     keyboard.text(c, `disamb:${c}`);
   });
+  return keyboard;
+}
+
+function buildDrillKeyboard(options: string[]): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  options.forEach((o) => keyboard.text(o, `drill:${o}`));
   return keyboard;
 }
 
@@ -125,11 +134,36 @@ bot.command("reset", async (ctx) => {
   await ctx.reply("Session reset. Use /start to onboard again.");
 });
 
+bot.command("drill", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  const q = buildMicroDrill(curriculum);
+  if (!q) {
+    await ctx.reply("No drills available yet.");
+    return;
+  }
+  setPendingDrill(from.id.toString(), q);
+  await ctx.reply(q.prompt, { reply_markup: buildDrillKeyboard(q.options) });
+});
+
+bot.command("tone", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  const q = buildToneDrill(curriculum);
+  if (!q) {
+    await ctx.reply("No tone drills available yet.");
+    return;
+  }
+  setPendingDrill(from.id.toString(), q);
+  await ctx.reply(q.prompt, { reply_markup: buildDrillKeyboard(q.options) });
+});
+
 bot.command("ping", (ctx) => ctx.reply("pong"));
 
 bot.command("menu", async (ctx) => {
   const lines = ["Menu:", ...menuOptions.map((m) => `- ${m.label}`)];
   await ctx.reply(lines.join("\n"));
+  await ctx.reply("Commands: /drill for Micro-Drills, /tone for Tone Practice, /pause to pause.");
 });
 
 bot.command("topics", async (ctx) => {
@@ -169,6 +203,22 @@ bot.command("bias", async (ctx) => {
 
 bot.on("callback_query:data", async (ctx) => {
   const data = ctx.callbackQuery.data;
+  if (data.startsWith("drill:")) {
+    const userId = ctx.from?.id?.toString();
+    if (!userId) return;
+    const drill = getPendingDrill(userId);
+    if (!drill) {
+      await ctx.answerCallbackQuery({ text: "No active drill." });
+      return;
+    }
+    const answer = data.slice("drill:".length);
+    const correct = answer === drill.answer;
+    setPendingDrill(userId, undefined);
+    await ctx.answerCallbackQuery();
+    await ctx.reply(correct ? "Correct!" : `Not quite. Answer: ${drill.answer}`);
+    return;
+  }
+
   if (!data.startsWith("disamb:")) return;
   const userId = ctx.from?.id?.toString();
   if (!userId) return;
