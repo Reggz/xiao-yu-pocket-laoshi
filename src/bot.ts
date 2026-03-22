@@ -55,27 +55,37 @@ bot.command("menu", async (ctx) => {
 });
 
 bot.command("topics", async (ctx) => {
-  const text = ctx.message.text;
-  const input = text.replace("/topics", "").trim();
+  const msg = ctx.message;
+  const from = ctx.from;
+  if (!msg?.text || !from) {
+    await ctx.reply("Send topics as comma-separated list. Example: /topics Food/Drink, Work");
+    return;
+  }
+  const input = msg.text.replace("/topics", "").trim();
   if (!input) {
     await ctx.reply("Send topics as comma-separated list. Example: /topics Food/Drink, Work");
     return;
   }
   const parsed = input.split(",").map((t) => t.trim()).filter(Boolean);
   const validated = validateTopicSelection(parsed);
-  setTopics(ctx.from.id.toString(), validated);
+  setTopics(from.id.toString(), validated);
   await ctx.reply(`Topics set: ${validated.join(", ") || "(none)"}`);
 });
 
 bot.command("bias", async (ctx) => {
-  const text = ctx.message.text;
-  const input = text.replace("/bias", "").trim();
+  const msg = ctx.message;
+  const from = ctx.from;
+  if (!msg?.text || !from) {
+    await ctx.reply("Set bias as a number between 0 and 1. Example: /bias 0.7");
+    return;
+  }
+  const input = msg.text.replace("/bias", "").trim();
   const value = parseFloat(input);
   if (Number.isNaN(value) || value < 0 || value > 1) {
     await ctx.reply("Set bias as a number between 0 and 1. Example: /bias 0.7");
     return;
   }
-  setTopicBiasRatio(ctx.from.id.toString(), value);
+  setTopicBiasRatio(from.id.toString(), value);
   await ctx.reply(`Topic bias ratio set to ${value}`);
 });
 
