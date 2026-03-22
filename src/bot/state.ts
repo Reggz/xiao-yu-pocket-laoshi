@@ -12,6 +12,8 @@ export type UserSessionState = {
   settings: UserSettings;
   onboardingComplete: boolean;
   paused: boolean;
+  lastOnboardingPromptAt?: number;
+  lastPausedPromptAt?: number;
 };
 
 const state = new Map<string, UserSessionState>();
@@ -94,4 +96,24 @@ export function resetSession(userId: string): void {
   session.onboardingComplete = false;
   session.paused = false;
   delete session.disambiguation;
+  delete session.lastOnboardingPromptAt;
+  delete session.lastPausedPromptAt;
+}
+
+export function shouldSendOnboardingPrompt(userId: string, nowMs: number, cooldownMs = 3000): boolean {
+  const session = getSession(userId);
+  if (!session.lastOnboardingPromptAt || nowMs - session.lastOnboardingPromptAt > cooldownMs) {
+    session.lastOnboardingPromptAt = nowMs;
+    return true;
+  }
+  return false;
+}
+
+export function shouldSendPausedPrompt(userId: string, nowMs: number, cooldownMs = 3000): boolean {
+  const session = getSession(userId);
+  if (!session.lastPausedPromptAt || nowMs - session.lastPausedPromptAt > cooldownMs) {
+    session.lastPausedPromptAt = nowMs;
+    return true;
+  }
+  return false;
 }

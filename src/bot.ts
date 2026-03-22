@@ -17,7 +17,9 @@ import {
   setOnboardingComplete,
   setPaused,
   setTopicBiasRatio,
-  setTopics
+  setTopics,
+  shouldSendOnboardingPrompt,
+  shouldSendPausedPrompt
 } from "./bot/state";
 import { checkSafety, safetyResponse } from "./safety/filter";
 import { menuOptions } from "./bot/menu";
@@ -195,13 +197,18 @@ bot.on("message:text", async (ctx) => {
   const userId = ctx.from?.id?.toString();
   if (!userId) return;
 
+  const now = Date.now();
   if (isPaused(userId)) {
-    await ctx.reply("Paused. Use /resume to continue.");
+    if (shouldSendPausedPrompt(userId, now)) {
+      await ctx.reply("Paused. Use /resume to continue.");
+    }
     return;
   }
 
   if (!isOnboardingComplete(userId)) {
-    await ctx.reply("Please complete onboarding with /start, then /done to begin.");
+    if (shouldSendOnboardingPrompt(userId, now)) {
+      await ctx.reply("Please complete onboarding with /start, then /done to begin.");
+    }
     return;
   }
 
