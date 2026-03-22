@@ -23,6 +23,8 @@ export type ResponseResult = {
   budget: Budget;
 };
 
+const BOT_NAME = "Xiao Yu";
+
 export async function generateResponse(
   adapter: LlmAdapter | null,
   userText: string,
@@ -52,7 +54,12 @@ export async function generateResponse(
     .map((t) => `User: ${t.input}\nBot: ${t.output}`)
     .join("\n");
 
-  const prompt = `You are a Mandarin tutor. Keep responses short and level-appropriate.\n${history}\nUser: ${userText}\nBot:`;
+  const prompt =
+    `You are ${BOT_NAME} (小语), a Mandarin tutor.\n` +
+    "Always respond in exactly 3 lines: (1) Chinese, (2) pinyin with tone numbers, (3) English.\n" +
+    "Keep sentences short, beginner-friendly, and level-appropriate.\n" +
+    "If the user asks for an explanation, provide a short bilingual explanation.\n" +
+    `${history}\nUser: ${userText}\nBot:`;
 
   try {
     const text = await generateWithGuardrails(adapter, prompt, {

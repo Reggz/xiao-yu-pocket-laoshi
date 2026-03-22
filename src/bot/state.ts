@@ -13,15 +13,25 @@ export type DrillState = {
   answer: string;
 };
 
+export type PlacementState = {
+  active: boolean;
+  index: number;
+  correct: number;
+};
+
 export type UserSessionState = {
   disambiguation?: DisambiguationState;
   buffer: InteractionSnippet[];
   settings: UserSettings;
   onboardingComplete: boolean;
+  onboardingPrompted: boolean;
   paused: boolean;
   lastOnboardingPromptAt?: number;
   lastPausedPromptAt?: number;
   pendingDrill?: DrillState;
+  placement?: PlacementState;
+  level: string;
+  guidedStage?: number;
 };
 
 const state = new Map<string, UserSessionState>();
@@ -37,7 +47,10 @@ export function getSession(userId: string): UserSessionState {
     buffer: [],
     settings: createDefaultSettings(),
     onboardingComplete: false,
-    paused: false
+    onboardingPrompted: false,
+    paused: false,
+    level: "A0",
+    guidedStage: 0
   };
   state.set(userId, created);
   return created;
@@ -88,13 +101,18 @@ export function isOnboardingComplete(userId: string): boolean {
   return getSession(userId).onboardingComplete;
 }
 
-export function setPaused(userId: string, paused: boolean): void {
+export function setOnboardingPrompted(userId: string, prompted: boolean): void {
   const session = getSession(userId);
-  session.paused = paused;
+  session.onboardingPrompted = prompted;
 }
 
 export function isPaused(userId: string): boolean {
   return getSession(userId).paused;
+}
+
+export function setPaused(userId: string, paused: boolean): void {
+  const session = getSession(userId);
+  session.paused = paused;
 }
 
 export function resetSession(userId: string): void {
@@ -102,23 +120,29 @@ export function resetSession(userId: string): void {
   session.buffer = [];
   session.settings = createDefaultSettings();
   session.onboardingComplete = false;
+  session.onboardingPrompted = false;
   session.paused = false;
+  session.level = "A0";
+  session.guidedStage = 0;
   delete session.disambiguation;
   delete session.lastOnboardingPromptAt;
   delete session.lastPausedPromptAt;
   delete session.pendingDrill;
+  delete session.placement;
 }
 
-export function shouldSendOnboardingPrompt(userId: string, nowMs: number, cooldownMs = 3000): boolean {
+export function shouldSendOnboardingPrompt(userId: string, nowMs: number, cooldownMs = 30000): boolean {
   const session = getSession(userId);
+  if (session.onboardingPrompted) return false;
   if (!session.lastOnboardingPromptAt || nowMs - session.lastOnboardingPromptAt > cooldownMs) {
     session.lastOnboardingPromptAt = nowMs;
+    session.onboardingPrompted = true;
     return true;
   }
   return false;
 }
 
-export function shouldSendPausedPrompt(userId: string, nowMs: number, cooldownMs = 3000): boolean {
+export function shouldSendPausedPrompt(userId: string, nowMs: number, cooldownMs = 30000): boolean {
   const session = getSession(userId);
   if (!session.lastPausedPromptAt || nowMs - session.lastPausedPromptAt > cooldownMs) {
     session.lastPausedPromptAt = nowMs;
@@ -134,4 +158,39 @@ export function setPendingDrill(userId: string, drill: DrillState | undefined): 
 
 export function getPendingDrill(userId: string): DrillState | undefined {
   return getSession(userId).pendingDrill;
+}
+
+export function startPlacement(userId: string): void {
+  const session = getSession(userId);
+  session.placement = { active: true, index: 0, correct: 0 };
+}
+
+export function stopPlacement(userId: string): void {
+  const session = getSession(userId);
+  delete session.placement;
+}
+
+export function getPlacement(userId: string): PlacementState | undefined {
+  return getSession(userId).placement;
+}
+
+export function updatePlacement(userId: string, correct: boolean): void {
+  const session = getSession(userId);
+  if (!session.placement) return;
+  if (correct) session.placement.correct += 1;
+  session.placement.index += 1;
+}
+
+export function setLevel(userId: string, level: string): void {
+  const session = getSession(userId);
+  session.level = level;
+}
+
+export function getLevel(userId: string): string {
+  return getSession(userId).level;
+}
+
+export function setGuidedStage(userId: string, stage: number): void {
+  const session = getSession(userId);
+  session.guidedStage = stage;
 }

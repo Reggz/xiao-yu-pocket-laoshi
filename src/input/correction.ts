@@ -45,8 +45,10 @@ function editDistanceOne(a: string, b: string): boolean {
 function confusionMatch(a: string, b: string): boolean {
   if (a === b) return true;
   for (const [x, y] of CONFUSION_GROUPS) {
-    if (a.includes(x) && b.includes(y)) return true;
-    if (a.includes(y) && b.includes(x)) return true;
+    if (a.startsWith(x) && b.startsWith(y) && a.slice(x.length) === b.slice(y.length)) return true;
+    if (a.startsWith(y) && b.startsWith(x) && a.slice(y.length) === b.slice(x.length)) return true;
+    if (a.endsWith(x) && b.endsWith(y) && a.slice(0, -x.length) === b.slice(0, -y.length)) return true;
+    if (a.endsWith(y) && b.endsWith(x) && a.slice(0, -y.length) === b.slice(0, -x.length)) return true;
   }
   return false;
 }
@@ -81,17 +83,23 @@ export function suggestCloseMatchesBySyllable(input: string, vocabulary: string[
   for (const vocab of vocabulary) {
     const vocabSyl = normalizeSyllables(vocab);
     if (vocabSyl.length !== inputSyl.length) continue;
+    let mismatches = 0;
     let ok = true;
     for (let i = 0; i < vocabSyl.length; i += 1) {
       const a = inputSyl[i];
       const b = vocabSyl[i];
       if (a === b) continue;
+      mismatches += 1;
+      if (mismatches > 1) {
+        ok = false;
+        break;
+      }
       if (editDistanceOne(a, b)) continue;
       if (confusionMatch(a, b)) continue;
       ok = false;
       break;
     }
-    if (ok) suggestions.add(vocab);
+    if (ok && mismatches > 0) suggestions.add(vocab);
   }
   return Array.from(suggestions).slice(0, 3);
 }

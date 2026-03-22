@@ -7,14 +7,11 @@ export type TemplateResponse = {
   english: string;
 };
 
-export function pickTemplateFromUnits(units: Curriculum["units"]): TemplateResponse | null {
-  for (const unit of units) {
-    if (unit.templates.length > 0) {
-      const t = unit.templates[0];
-      return { hanzi: t.hanzi, pinyin: t.pinyin, english: t.english };
-    }
-  }
-  return null;
+function pickTemplateFromUnits(units: Curriculum["units"], rng: () => number): TemplateResponse | null {
+  const templates = units.flatMap((unit) => unit.templates);
+  if (templates.length === 0) return null;
+  const selected = templates[Math.floor(rng() * templates.length)];
+  return { hanzi: selected.hanzi, pinyin: selected.pinyin, english: selected.english };
 }
 
 export function pickTemplate(
@@ -28,9 +25,9 @@ export function pickTemplate(
   const topicUnits = topics.length ? getUnitsByTopic({ units: levelUnits }, topics) : [];
 
   if (topicUnits.length && rng() < topicBiasRatio) {
-    const fromTopics = pickTemplateFromUnits(topicUnits);
+    const fromTopics = pickTemplateFromUnits(topicUnits, rng);
     if (fromTopics) return fromTopics;
   }
 
-  return pickTemplateFromUnits(levelUnits);
+  return pickTemplateFromUnits(levelUnits, rng);
 }

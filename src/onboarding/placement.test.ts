@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { placementQuestions, scorePlacement, getPlacementQuestion } from "./placement";
+import { placementQuestions, scorePlacement, getPlacementQuestion, evaluatePlacementAnswer } from "./placement";
 
 describe("placement", () => {
   it("has 5 placement questions", () => {
@@ -15,5 +15,11 @@ describe("placement", () => {
     expect(scorePlacement(0)).toBe("A0");
     expect(scorePlacement(2)).toBe("A1");
     expect(scorePlacement(4)).toBe("A2");
+  });
+
+  it("evaluates placement answers", () => {
+    const q = placementQuestions[0];
+    expect(evaluatePlacementAnswer("wo jiao Sarah", q.expectedKeywords)).toBe(true);
+    expect(evaluatePlacementAnswer("hello", q.expectedKeywords)).toBe(false);
   });
 });

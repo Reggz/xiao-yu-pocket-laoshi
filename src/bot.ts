@@ -7,21 +7,29 @@ import { buildAutoHint, buildCorrectionHint } from "./response/hints";
 import {
   appendInteraction,
   clearDisambiguation,
+  getLevel,
   getSession,
   getTopicBiasRatio,
   getTopics,
   getPendingDrill,
+  getPlacement,
   isOnboardingComplete,
   isPaused,
   resetSession,
   setDisambiguation,
+  setGuidedStage,
+  setLevel,
   setOnboardingComplete,
+  setOnboardingPrompted,
   setPaused,
   setPendingDrill,
   setTopicBiasRatio,
   setTopics,
   shouldSendOnboardingPrompt,
-  shouldSendPausedPrompt
+  shouldSendPausedPrompt,
+  startPlacement,
+  stopPlacement,
+  updatePlacement
 } from "./bot/state";
 import { checkSafety, safetyResponse } from "./safety/filter";
 import { menuOptions } from "./bot/menu";
@@ -32,6 +40,8 @@ import { generateResponse } from "./response/engine";
 import { selectAllowedGrammar } from "./response/grammar";
 import { initBudget } from "./llm/manager";
 import { buildMicroDrill, buildToneDrill } from "./drills/quick";
+import { placementQuestions, evaluatePlacementAnswer, scorePlacement } from "./onboarding/placement";
+import { getGuidedReply } from "./response/guided";
 
 const config = loadConfig();
 const curriculum = loadCurriculumFromFile("docs/curriculum_seed.md");
@@ -47,8 +57,16 @@ const HELP_PATTERNS = [
   /i\s*don'?t\s*understand/i,
   /^what\??$/i,
   /^help$/i,
-  /how\s+do\s+i\s+reply/i
+  /how\s+do\s*i\s+reply/i,
+  /how\s+do\s+i\s+respond/i
 ];
+
+const EXPLAIN_PATTERNS = [/can\s+you\s+explain/i, /please\s+explain/i, /explain\s+that/i];
+
+const MICRO_DRILL_ALIASES = new Set(["micro-drills", "micro drills", "microdrills"]);
+const TONE_DRILL_ALIASES = new Set(["tone practice", "tone", "tone-drills", "tone drills"]);
+const PLACEMENT_ALIASES = new Set(["placement", "placement test", "start placement"]);
+const SKIP_ALIASES = new Set(["skip", "skip placement"]);
 
 export const bot = new Bot(config.telegramBotToken);
 
@@ -73,6 +91,13 @@ function buildDrillKeyboard(options: string[]): InlineKeyboard {
   return keyboard;
 }
 
+function buildOnboardingKeyboard(): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  keyboard.text("Start Placement", "onboard:placement");
+  keyboard.text("Skip", "onboard:skip");
+  return keyboard;
+}
+
 function buildLlmPolicy() {
   return { maxCallsPerSession: 3, disableCaps: config.llmDisableCaps ?? false };
 }
@@ -87,15 +112,64 @@ function isHelpIntent(text: string): boolean {
   return HELP_PATTERNS.some((p) => p.test(text.trim()));
 }
 
+function isExplainIntent(text: string): boolean {
+  return EXPLAIN_PATTERNS.some((p) => p.test(text.trim()));
+}
+
+function buildHelpResponse(): string {
+  return (
+    "没关系，我可以帮助你。你可以说：你好 / 我叫… / 我很好。\n" +
+    "mei2 guan1 xi, wo3 ke3 yi3 bang1 zhu4 ni3. ni3 ke3 yi3 shuo1: ni3 hao3 / wo3 jiao4… / wo3 hen3 hao3.\n" +
+    "No worries, I can help. You can say: hello / my name is… / I’m good."
+  );
+}
+
+function buildExplainResponse(): string {
+  return (
+    "可以的。请告诉我你想解释的词或句子。\n" +
+    "ke3 yi3 de. qing3 gao4 su4 wo3 ni3 xiang3 jie3 shi4 de ci2 huo4 ju4 zi.\n" +
+    "Sure. Tell me the word or sentence you want explained."
+  );
+}
+
+function currentPlacementPrompt(index: number): string | null {
+  const q = placementQuestions[index];
+  if (!q) return null;
+  return q.prompt;
+}
+
+async function sendMicroDrill(ctx: any, userId: string): Promise<void> {
+  const q = buildMicroDrill(curriculum);
+  if (!q) {
+    await ctx.reply("No drills available yet.");
+    return;
+  }
+  setPendingDrill(userId, q);
+  await ctx.reply(q.prompt, { reply_markup: buildDrillKeyboard(q.options) });
+}
+
+async function sendToneDrill(ctx: any, userId: string): Promise<void> {
+  const q = buildToneDrill(curriculum);
+  if (!q) {
+    await ctx.reply("No tone drills available yet.");
+    return;
+  }
+  setPendingDrill(userId, q);
+  await ctx.reply(q.prompt, { reply_markup: buildDrillKeyboard(q.options) });
+}
+
 bot.command("start", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
   setOnboardingComplete(from.id.toString(), false);
+  setOnboardingPrompted(from.id.toString(), false);
+  stopPlacement(from.id.toString());
   await ctx.reply(
     "Welcome to Xiao Yu!\n" +
       "- You can type Mandarin, pinyin (with or without tones), or mix English.\n" +
       "- Set topics with /topics Food/Drink, Work\n" +
-      "- When ready, type /done to start."
+      "Would you like a short placement test?",
+    { reply_markup: buildOnboardingKeyboard() }
   );
 });
 
@@ -103,6 +177,7 @@ bot.command("done", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
   setOnboardingComplete(from.id.toString(), true);
+  stopPlacement(from.id.toString());
   await ctx.reply("Onboarding complete. Send a message to begin.");
 });
 
@@ -110,7 +185,18 @@ bot.command("skip", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
   setOnboardingComplete(from.id.toString(), true);
+  stopPlacement(from.id.toString());
   await ctx.reply("Skipped onboarding. Send a message to begin.");
+});
+
+bot.command("placement", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  startPlacement(from.id.toString());
+  const prompt = currentPlacementPrompt(0);
+  if (prompt) {
+    await ctx.reply(`Placement Q1: ${prompt}`);
+  }
 });
 
 bot.command("pause", async (ctx) => {
@@ -137,25 +223,13 @@ bot.command("reset", async (ctx) => {
 bot.command("drill", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
-  const q = buildMicroDrill(curriculum);
-  if (!q) {
-    await ctx.reply("No drills available yet.");
-    return;
-  }
-  setPendingDrill(from.id.toString(), q);
-  await ctx.reply(q.prompt, { reply_markup: buildDrillKeyboard(q.options) });
+  await sendMicroDrill(ctx, from.id.toString());
 });
 
 bot.command("tone", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
-  const q = buildToneDrill(curriculum);
-  if (!q) {
-    await ctx.reply("No tone drills available yet.");
-    return;
-  }
-  setPendingDrill(from.id.toString(), q);
-  await ctx.reply(q.prompt, { reply_markup: buildDrillKeyboard(q.options) });
+  await sendToneDrill(ctx, from.id.toString());
 });
 
 bot.command("ping", (ctx) => ctx.reply("pong"));
@@ -203,6 +277,28 @@ bot.command("bias", async (ctx) => {
 
 bot.on("callback_query:data", async (ctx) => {
   const data = ctx.callbackQuery.data;
+
+  if (data.startsWith("onboard:")) {
+    const userId = ctx.from?.id?.toString();
+    if (!userId) return;
+    if (data === "onboard:skip") {
+      setOnboardingComplete(userId, true);
+      stopPlacement(userId);
+      await ctx.answerCallbackQuery();
+      await ctx.reply("Skipped onboarding. Send a message to begin.");
+      return;
+    }
+    if (data === "onboard:placement") {
+      startPlacement(userId);
+      await ctx.answerCallbackQuery();
+      const prompt = currentPlacementPrompt(0);
+      if (prompt) {
+        await ctx.reply(`Placement Q1: ${prompt}`);
+      }
+      return;
+    }
+  }
+
   if (data.startsWith("drill:")) {
     const userId = ctx.from?.id?.toString();
     if (!userId) return;
@@ -245,7 +341,7 @@ bot.on("callback_query:data", async (ctx) => {
   clearDisambiguation(userId);
   const result = await generateResponse(llmAdapter, resolved, {
     curriculum,
-    allowedLevels: ["A0"],
+    allowedLevels: [getLevel(userId)],
     topics: getTopics(userId),
     topicBiasRatio: getTopicBiasRatio(userId),
     grammar: selectAllowedGrammar([], ["critical", "core", "advanced"]),
@@ -264,6 +360,75 @@ bot.on("message:text", async (ctx) => {
   const userId = ctx.from?.id?.toString();
   if (!userId) return;
 
+  const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (MICRO_DRILL_ALIASES.has(lower)) {
+    if (!isOnboardingComplete(userId)) {
+      await ctx.reply("Please complete onboarding first with /start.");
+      return;
+    }
+    await sendMicroDrill(ctx, userId);
+    return;
+  }
+
+  if (TONE_DRILL_ALIASES.has(lower)) {
+    if (!isOnboardingComplete(userId)) {
+      await ctx.reply("Please complete onboarding first with /start.");
+      return;
+    }
+    await sendToneDrill(ctx, userId);
+    return;
+  }
+
+  const placement = getPlacement(userId);
+  if (placement?.active) {
+    if (SKIP_ALIASES.has(lower)) {
+      setOnboardingComplete(userId, true);
+      stopPlacement(userId);
+      await ctx.reply("Skipped placement. Send a message to begin.");
+      return;
+    }
+    const q = placementQuestions[placement.index];
+    if (!q) {
+      const level = scorePlacement(placement.correct);
+      setLevel(userId, level);
+      setOnboardingComplete(userId, true);
+      stopPlacement(userId);
+      await ctx.reply(`Placement complete. Starting at ${level}. Send a message to begin.`);
+      return;
+    }
+    const correct = evaluatePlacementAnswer(text, q.expectedKeywords);
+    updatePlacement(userId, correct);
+    const nextPrompt = currentPlacementPrompt(placement.index + 1);
+    if (nextPrompt) {
+      await ctx.reply(`Placement Q${placement.index + 2}: ${nextPrompt}`);
+    } else {
+      const level = scorePlacement(placement.correct + (correct ? 1 : 0));
+      setLevel(userId, level);
+      setOnboardingComplete(userId, true);
+      stopPlacement(userId);
+      await ctx.reply(`Placement complete. Starting at ${level}. Send a message to begin.`);
+    }
+    return;
+  }
+
+  if (!isOnboardingComplete(userId) && PLACEMENT_ALIASES.has(lower)) {
+    startPlacement(userId);
+    const prompt = currentPlacementPrompt(0);
+    if (prompt) {
+      await ctx.reply(`Placement Q1: ${prompt}`);
+    }
+    return;
+  }
+
+  if (!isOnboardingComplete(userId) && SKIP_ALIASES.has(lower)) {
+    setOnboardingComplete(userId, true);
+    stopPlacement(userId);
+    await ctx.reply("Skipped onboarding. Send a message to begin.");
+    return;
+  }
+
   const now = Date.now();
   if (isPaused(userId)) {
     if (shouldSendPausedPrompt(userId, now)) {
@@ -274,13 +439,18 @@ bot.on("message:text", async (ctx) => {
 
   if (!isOnboardingComplete(userId)) {
     if (shouldSendOnboardingPrompt(userId, now)) {
-      await ctx.reply("Please complete onboarding with /start, then /done to begin.");
+      await ctx.reply("Please complete onboarding with /start, or type 'placement' to begin.");
     }
     return;
   }
 
   if (isHelpIntent(text)) {
-    await ctx.reply("Try replying with: 你好，我叫… / 我很好 / 你呢？");
+    await ctx.reply(buildHelpResponse());
+    return;
+  }
+
+  if (isExplainIntent(text)) {
+    await ctx.reply(buildExplainResponse());
     return;
   }
 
@@ -296,20 +466,20 @@ bot.on("message:text", async (ctx) => {
     if (isDisambiguationExpired(state, Date.now())) {
       clearDisambiguation(userId);
     } else {
-      const trimmed = text.trim();
+      const trimmedSelection = text.trim();
       let selection: string | null = null;
-      if (/^[1-9]$/.test(trimmed)) {
-        const idx = parseInt(trimmed, 10) - 1;
+      if (/^[1-9]$/.test(trimmedSelection)) {
+        const idx = parseInt(trimmedSelection, 10) - 1;
         selection = state.candidates[idx] ?? null;
       }
-      if (!selection && state.candidates.includes(trimmed)) {
-        selection = trimmed;
+      if (!selection && state.candidates.includes(trimmedSelection)) {
+        selection = trimmedSelection;
       }
       if (selection) {
         clearDisambiguation(userId);
         const result = await generateResponse(llmAdapter, selection, {
           curriculum,
-          allowedLevels: ["A0"],
+          allowedLevels: [getLevel(userId)],
           topics: getTopics(userId),
           topicBiasRatio: getTopicBiasRatio(userId),
           grammar: selectAllowedGrammar([], ["critical", "core", "advanced"]),
@@ -322,6 +492,14 @@ bot.on("message:text", async (ctx) => {
         return;
       }
     }
+  }
+
+  const guided = getGuidedReply(text, session, curriculum);
+  if (guided) {
+    setGuidedStage(userId, guided.nextStage);
+    await ctx.reply(guided.text);
+    appendInteraction(userId, text, guided.text);
+    return;
   }
 
   const { normalized, candidates, corrections, englishHints } = runInputPipeline(text);
@@ -338,7 +516,7 @@ bot.on("message:text", async (ctx) => {
 
   const result = await generateResponse(llmAdapter, text, {
     curriculum,
-    allowedLevels: ["A0"],
+    allowedLevels: [getLevel(userId)],
     topics: getTopics(userId),
     topicBiasRatio: getTopicBiasRatio(userId),
     grammar: selectAllowedGrammar([], ["critical", "core", "advanced"]),
