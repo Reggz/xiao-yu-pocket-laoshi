@@ -2,7 +2,7 @@ import { loadCurriculumFromFile } from "../curriculum/loader";
 import { Curriculum, CurriculumItem } from "../curriculum/types";
 import { normalizeInput } from "./normalize";
 import { loadCandidateIndexFromSeed, resolveCandidatesFromPinyin } from "./candidate_resolver";
-import { suggestCloseMatches } from "./correction";
+import { suggestCloseMatchesBySyllable } from "./correction";
 import { NormalizedInput, Token } from "./types";
 
 export type EnglishHint = {
@@ -17,6 +17,28 @@ export type InputPipelineResult = {
   corrections: string[];
   englishHints: EnglishHint[];
 };
+
+const ENGLISH_STOPWORDS = new Set([
+  "i",
+  "you",
+  "me",
+  "my",
+  "your",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "to",
+  "do",
+  "does",
+  "what",
+  "how",
+  "why",
+  "is",
+  "are",
+  "am"
+]);
 
 function stripToneNumbers(pinyin: string): string {
   return pinyin.replace(/[1-5]/g, "");
@@ -87,6 +109,13 @@ function extractEnglishPhrases(tokens: Token[]): string[] {
   return phrases.map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
 }
 
+function shouldHintEnglish(phrase: string): boolean {
+  const words = phrase.split(" ").filter(Boolean);
+  if (words.length === 1 && ENGLISH_STOPWORDS.has(words[0])) return false;
+  if (words.length === 1 && words[0].length < 3) return false;
+  return true;
+}
+
 export function runInputPipeline(input: string): InputPipelineResult {
   const normalized = normalizeInput(input);
   const index = loadCandidateIndexFromSeed();
@@ -95,12 +124,13 @@ export function runInputPipeline(input: string): InputPipelineResult {
   const curriculum = loadCurriculumFromFile("docs/curriculum_seed.md");
   const vocab = buildPinyinVocabulary(curriculum);
   const correctionInput = stripToneNumbers(normalized.canonicalPinyin);
-  const corrections = correctionInput ? suggestCloseMatches(correctionInput, vocab) : [];
+  const corrections = correctionInput ? suggestCloseMatchesBySyllable(correctionInput, vocab) : [];
 
   const englishMap = buildEnglishMap(curriculum);
   const englishPhrases = extractEnglishPhrases(normalized.tokens);
   const englishHints: EnglishHint[] = [];
   for (const phrase of englishPhrases) {
+    if (!shouldHintEnglish(phrase)) continue;
     const item = englishMap.get(phrase);
     if (item) {
       englishHints.push({ english: item.english, hanzi: item.hanzi, pinyin: item.pinyin });

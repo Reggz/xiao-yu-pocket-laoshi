@@ -51,6 +51,14 @@ function confusionMatch(a: string, b: string): boolean {
   return false;
 }
 
+function normalizeSyllables(input: string): string[] {
+  return input
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
 export function suggestCloseMatches(input: string, vocabulary: string[]): string[] {
   const lower = input.toLowerCase();
   const suggestions = new Set<string>();
@@ -63,4 +71,27 @@ export function suggestCloseMatches(input: string, vocabulary: string[]): string
   }
 
   return Array.from(suggestions).slice(0, 5);
+}
+
+export function suggestCloseMatchesBySyllable(input: string, vocabulary: string[]): string[] {
+  const inputSyl = normalizeSyllables(input);
+  if (!inputSyl.length) return [];
+
+  const suggestions = new Set<string>();
+  for (const vocab of vocabulary) {
+    const vocabSyl = normalizeSyllables(vocab);
+    if (vocabSyl.length !== inputSyl.length) continue;
+    let ok = true;
+    for (let i = 0; i < vocabSyl.length; i += 1) {
+      const a = inputSyl[i];
+      const b = vocabSyl[i];
+      if (a === b) continue;
+      if (editDistanceOne(a, b)) continue;
+      if (confusionMatch(a, b)) continue;
+      ok = false;
+      break;
+    }
+    if (ok) suggestions.add(vocab);
+  }
+  return Array.from(suggestions).slice(0, 3);
 }

@@ -40,6 +40,13 @@ const llmAdapter = (() => {
   }
 })();
 
+const HELP_PATTERNS = [
+  /i\s*don'?t\s*understand/i,
+  /^what\??$/i,
+  /^help$/i,
+  /how\s+do\s+i\s+reply/i
+];
+
 export const bot = new Bot(config.telegramBotToken);
 
 let isInitialized = false;
@@ -59,6 +66,16 @@ function buildDisambKeyboard(candidates: string[]): InlineKeyboard {
 
 function buildLlmPolicy() {
   return { maxCallsPerSession: 3, disableCaps: config.llmDisableCaps ?? false };
+}
+
+function shouldDisambiguate(candidates: string[], pinyin: string): boolean {
+  if (candidates.length <= 1) return false;
+  const syllables = pinyin.trim().split(/\s+/).filter(Boolean);
+  return syllables.length === 1;
+}
+
+function isHelpIntent(text: string): boolean {
+  return HELP_PATTERNS.some((p) => p.test(text.trim()));
 }
 
 bot.command("start", async (ctx) => {
@@ -212,6 +229,11 @@ bot.on("message:text", async (ctx) => {
     return;
   }
 
+  if (isHelpIntent(text)) {
+    await ctx.reply("Try replying with: 你好，我叫… / 我很好 / 你呢？");
+    return;
+  }
+
   const safety = checkSafety(text);
   if (safety.blocked) {
     await ctx.reply(safetyResponse());
@@ -254,7 +276,7 @@ bot.on("message:text", async (ctx) => {
 
   const { normalized, candidates, corrections, englishHints } = runInputPipeline(text);
 
-  if (candidates.length > 1) {
+  if (shouldDisambiguate(candidates, normalized.canonicalPinyin)) {
     const disamb = startDisambiguation(text, candidates, Date.now());
     if (disamb.state) {
       setDisambiguation(userId, disamb.state);
