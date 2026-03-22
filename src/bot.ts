@@ -10,7 +10,9 @@ import {
   getSession,
   getTopicBiasRatio,
   getTopics,
+  isOnboardingComplete,
   setDisambiguation,
+  setOnboardingComplete,
   setTopicBiasRatio,
   setTopics
 } from "./bot/state";
@@ -53,6 +55,32 @@ function buildDisambKeyboard(candidates: string[]): InlineKeyboard {
 function buildLlmPolicy() {
   return { maxCallsPerSession: 3, disableCaps: config.llmDisableCaps ?? false };
 }
+
+bot.command("start", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  setOnboardingComplete(from.id.toString(), false);
+  await ctx.reply(
+    "Welcome to Xiao Yu!\n" +
+      "- You can type Mandarin, pinyin (with or without tones), or mix English.\n" +
+      "- Set topics with /topics Food/Drink, Work\n" +
+      "- When ready, type /done to start." 
+  );
+});
+
+bot.command("done", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  setOnboardingComplete(from.id.toString(), true);
+  await ctx.reply("Onboarding complete. Send a message to begin.");
+});
+
+bot.command("skip", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  setOnboardingComplete(from.id.toString(), true);
+  await ctx.reply("Skipped onboarding. Send a message to begin.");
+});
 
 bot.command("ping", (ctx) => ctx.reply("pong"));
 
@@ -142,6 +170,11 @@ bot.on("message:text", async (ctx) => {
   const text = ctx.message.text;
   const userId = ctx.from?.id?.toString();
   if (!userId) return;
+
+  if (!isOnboardingComplete(userId)) {
+    await ctx.reply("Please complete onboarding with /start, then /done to begin.");
+    return;
+  }
 
   const safety = checkSafety(text);
   if (safety.blocked) {

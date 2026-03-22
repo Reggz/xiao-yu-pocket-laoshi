@@ -19,3 +19,8 @@ See: docs/testing_manual.md
 - Verify fallback behavior when LLM fails or is throttled.
 - Validate grammar guardrails + disambiguation + correction in live chat.
 - Confirm logs record LLM calls, latency, and fallback reasons.
+
+## Onboarding + De-dup Checks
+- Verify `/start` triggers onboarding instructions.
+- Verify `/done` or `/skip` unlocks normal chat.
+- Verify update_id de-dup avoids duplicate replies when webhook retries.

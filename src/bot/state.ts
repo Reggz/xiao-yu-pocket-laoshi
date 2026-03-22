@@ -10,6 +10,7 @@ export type UserSessionState = {
   disambiguation?: DisambiguationState;
   buffer: InteractionSnippet[];
   settings: UserSettings;
+  onboardingComplete: boolean;
 };
 
 const state = new Map<string, UserSessionState>();
@@ -21,7 +22,7 @@ function createDefaultSettings(): UserSettings {
 export function getSession(userId: string): UserSessionState {
   const existing = state.get(userId);
   if (existing) return existing;
-  const created: UserSessionState = { buffer: [], settings: createDefaultSettings() };
+  const created: UserSessionState = { buffer: [], settings: createDefaultSettings(), onboardingComplete: false };
   state.set(userId, created);
   return created;
 }
@@ -60,4 +61,13 @@ export function setTopicBiasRatio(userId: string, ratio: number): void {
 
 export function getTopicBiasRatio(userId: string): number {
   return getSession(userId).settings.topicBiasRatio;
+}
+
+export function setOnboardingComplete(userId: string, complete: boolean): void {
+  const session = getSession(userId);
+  session.onboardingComplete = complete;
+}
+
+export function isOnboardingComplete(userId: string): boolean {
+  return getSession(userId).onboardingComplete;
 }

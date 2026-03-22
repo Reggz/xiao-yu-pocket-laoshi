@@ -103,3 +103,7 @@ Free-text mini conversation:
 - Quiet hours respected.
 - Each micro-session should be short, like a real conversation (few back-and-forth turns).
 - Event-based pings: if no interaction by evening, send a micro-drill teaser rather than a generic reminder.
+
+## 9. Onboarding Gate
+- If onboarding is incomplete, bot replies with instructions to use `/start`, then `/done` or `/skip`.
+- LLM use is disabled until onboarding is complete.

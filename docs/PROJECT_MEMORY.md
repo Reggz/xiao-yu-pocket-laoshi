@@ -96,3 +96,5 @@
 - Admin override: LLM_DISABLE_CAPS can disable throttling for exploratory testing.
 - Phase 12A completed: real LLM adapter wired into response engine with template fallback, throttling, and provider switch config.
 - Phase 12B completed: response engine integrated end-to-end with LLM policy manager, caps override, and bot flow updated.
+- Onboarding gate added: /start sets onboarding state, /done or /skip unlocks normal chat; LLM use is blocked until onboarding complete.
+- Webhook de-dup added using update_id TTL to prevent duplicate replies.
