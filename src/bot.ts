@@ -11,8 +11,11 @@ import {
   getTopicBiasRatio,
   getTopics,
   isOnboardingComplete,
+  isPaused,
+  resetSession,
   setDisambiguation,
   setOnboardingComplete,
+  setPaused,
   setTopicBiasRatio,
   setTopics
 } from "./bot/state";
@@ -64,7 +67,7 @@ bot.command("start", async (ctx) => {
     "Welcome to Xiao Yu!\n" +
       "- You can type Mandarin, pinyin (with or without tones), or mix English.\n" +
       "- Set topics with /topics Food/Drink, Work\n" +
-      "- When ready, type /done to start." 
+      "- When ready, type /done to start."
   );
 });
 
@@ -80,6 +83,27 @@ bot.command("skip", async (ctx) => {
   if (!from) return;
   setOnboardingComplete(from.id.toString(), true);
   await ctx.reply("Skipped onboarding. Send a message to begin.");
+});
+
+bot.command("pause", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  setPaused(from.id.toString(), true);
+  await ctx.reply("Paused. Use /resume to continue.");
+});
+
+bot.command("resume", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  setPaused(from.id.toString(), false);
+  await ctx.reply("Resumed. Send a message to begin.");
+});
+
+bot.command("reset", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  resetSession(from.id.toString());
+  await ctx.reply("Session reset. Use /start to onboard again.");
 });
 
 bot.command("ping", (ctx) => ctx.reply("pong"));
@@ -170,6 +194,11 @@ bot.on("message:text", async (ctx) => {
   const text = ctx.message.text;
   const userId = ctx.from?.id?.toString();
   if (!userId) return;
+
+  if (isPaused(userId)) {
+    await ctx.reply("Paused. Use /resume to continue.");
+    return;
+  }
 
   if (!isOnboardingComplete(userId)) {
     await ctx.reply("Please complete onboarding with /start, then /done to begin.");

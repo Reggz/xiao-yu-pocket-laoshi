@@ -107,3 +107,8 @@ Free-text mini conversation:
 ## 9. Onboarding Gate
 - If onboarding is incomplete, bot replies with instructions to use `/start`, then `/done` or `/skip`.
 - LLM use is disabled until onboarding is complete.
+
+## 10. Power Controls
+- `/pause` blocks all chat responses except `/resume` and `/reset`.
+- `/resume` re-enables normal chat.
+- `/reset` clears session state and requires onboarding again.

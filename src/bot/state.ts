@@ -11,6 +11,7 @@ export type UserSessionState = {
   buffer: InteractionSnippet[];
   settings: UserSettings;
   onboardingComplete: boolean;
+  paused: boolean;
 };
 
 const state = new Map<string, UserSessionState>();
@@ -22,7 +23,12 @@ function createDefaultSettings(): UserSettings {
 export function getSession(userId: string): UserSessionState {
   const existing = state.get(userId);
   if (existing) return existing;
-  const created: UserSessionState = { buffer: [], settings: createDefaultSettings(), onboardingComplete: false };
+  const created: UserSessionState = {
+    buffer: [],
+    settings: createDefaultSettings(),
+    onboardingComplete: false,
+    paused: false
+  };
   state.set(userId, created);
   return created;
 }
@@ -70,4 +76,22 @@ export function setOnboardingComplete(userId: string, complete: boolean): void {
 
 export function isOnboardingComplete(userId: string): boolean {
   return getSession(userId).onboardingComplete;
+}
+
+export function setPaused(userId: string, paused: boolean): void {
+  const session = getSession(userId);
+  session.paused = paused;
+}
+
+export function isPaused(userId: string): boolean {
+  return getSession(userId).paused;
+}
+
+export function resetSession(userId: string): void {
+  const session = getSession(userId);
+  session.buffer = [];
+  session.settings = createDefaultSettings();
+  session.onboardingComplete = false;
+  session.paused = false;
+  delete session.disambiguation;
 }

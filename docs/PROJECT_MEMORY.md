@@ -98,3 +98,4 @@
 - Phase 12B completed: response engine integrated end-to-end with LLM policy manager, caps override, and bot flow updated.
 - Onboarding gate added: /start sets onboarding state, /done or /skip unlocks normal chat; LLM use is blocked until onboarding complete.
 - Webhook de-dup added using update_id TTL to prevent duplicate replies.
+- Power controls added: /pause, /resume, /reset with pause gating and session reset behavior.

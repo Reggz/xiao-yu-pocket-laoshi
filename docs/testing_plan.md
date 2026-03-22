@@ -24,3 +24,8 @@ See: docs/testing_manual.md
 - Verify `/start` triggers onboarding instructions.
 - Verify `/done` or `/skip` unlocks normal chat.
 - Verify update_id de-dup avoids duplicate replies when webhook retries.
+
+## Pause/Reset Checks
+- /pause stops replies and prevents LLM calls.
+- /resume restores normal chat.
+- /reset clears session state and requires /start.

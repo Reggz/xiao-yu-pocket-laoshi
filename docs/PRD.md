@@ -285,3 +285,8 @@ Topic Learning: user-selected topics (1-3) to prioritize drills and conversation
 ## 10.2 Onboarding Gate (Required)
 - Users must complete onboarding (`/start` then `/done` or `/skip`) before free chat.
 - LLM responses are blocked until onboarding is complete; bot uses templates only.
+
+## 10.3 Power Controls (Required)
+- `/pause` stops normal chat and prevents LLM calls until `/resume`.
+- `/resume` restores normal chat.
+- `/reset` clears session state and requires `/start` again.
