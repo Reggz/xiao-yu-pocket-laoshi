@@ -551,7 +551,9 @@ bot.on("message:text", async (ctx) => {
   appendInteraction(userId, text, finalOutput);
 
   await recordInteraction(config.databaseUrl, {
-    userId,
+    telegramId: userId,
+    telegramHandle: ctx.from?.username,
+    preferredName: ctx.from?.first_name,
     channel: "telegram",
     type: "chat",
     mode: "free_text",

@@ -8,6 +8,7 @@
 - email (nullable)
 - phone_number (nullable)
 - telegram_handle (nullable)
+- telegram_id (nullable, unique)
 - preferred_name (nullable)
 - membership_status (free | trial | paid | cancelled)
 - subscription_tier (nullable)
@@ -23,8 +24,8 @@
 - quiet_hours (json)
 - mode_preferences (json)
 - topic_bias_ratio (default 0.7)
-- session_windows (default [{\"start\":\"06:00\",\"end\":\"12:00\"},{\"start\":\"12:00\",\"end\":\"18:00\"},{\"start\":\"18:00\",\"end\":\"24:00\"}])
-- session_checkins (default [\"08:00\",\"15:00\",\"21:30\"])
+- session_windows (default [{"start":"06:00","end":"12:00"},{"start":"12:00","end":"18:00"},{"start":"18:00","end":"24:00"}])
+- session_checkins (default ["08:00","15:00","21:30"])
 
 ### topics
 - id
@@ -152,6 +153,7 @@
 - `user_items` tracks mastery and scheduling.
 - `exploratory_items` captures user code-switching and auto-hints.
 - `normalization_candidates` stores possible corrections for ambiguous pinyin or incorrect characters.
+- `telegram_id` is used to map Telegram users to internal UUIDs.
 
 ## 3. Mastery Progression (Example)
 - mastery_level 0: seen once, incorrect.
