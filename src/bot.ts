@@ -34,7 +34,7 @@ import {
 import { checkSafety, safetyResponse } from "./safety/filter";
 import { menuOptions } from "./bot/menu";
 import { validateTopicSelection } from "./onboarding/topics";
-import { recordInteraction } from "./storage/db";
+import { logInteractionSafe } from "./storage/logging";
 import { createLlmAdapter } from "./llm/factory";
 import { generateResponse } from "./response/engine";
 import { selectAllowedGrammar } from "./response/grammar";
@@ -351,8 +351,18 @@ bot.on("callback_query:data", async (ctx) => {
   });
 
   await ctx.answerCallbackQuery();
-  await ctx.reply(`已选择：${resolved}\n${result.text}`);
+  const replyText = `已选择：${resolved}\n${result.text}`;
+  await ctx.reply(replyText);
   appendInteraction(userId, resolved, result.text);
+  await logInteractionSafe({
+    databaseUrl: config.databaseUrl,
+    telegramId: userId,
+    telegramHandle: ctx.from?.username,
+    preferredName: ctx.from?.first_name,
+    input: state.pendingInput,
+    output: replyText,
+    mode: "disambiguation"
+  });
 });
 
 bot.on("message:text", async (ctx) => {
@@ -445,12 +455,32 @@ bot.on("message:text", async (ctx) => {
   }
 
   if (isHelpIntent(text)) {
-    await ctx.reply(buildHelpResponse());
+    const help = buildHelpResponse();
+    await ctx.reply(help);
+    await logInteractionSafe({
+      databaseUrl: config.databaseUrl,
+      telegramId: userId,
+      telegramHandle: ctx.from?.username,
+      preferredName: ctx.from?.first_name,
+      input: text,
+      output: help,
+      mode: "help"
+    });
     return;
   }
 
   if (isExplainIntent(text)) {
-    await ctx.reply(buildExplainResponse());
+    const explain = buildExplainResponse();
+    await ctx.reply(explain);
+    await logInteractionSafe({
+      databaseUrl: config.databaseUrl,
+      telegramId: userId,
+      telegramHandle: ctx.from?.username,
+      preferredName: ctx.from?.first_name,
+      input: text,
+      output: explain,
+      mode: "explain"
+    });
     return;
   }
 
@@ -487,8 +517,18 @@ bot.on("message:text", async (ctx) => {
           budget: initBudget(buildLlmPolicy()),
           llmPolicy: buildLlmPolicy()
         });
-        await ctx.reply(`已选择：${selection}\n${result.text}`);
+        const replyText = `已选择：${selection}\n${result.text}`;
+        await ctx.reply(replyText);
         appendInteraction(userId, selection, result.text);
+        await logInteractionSafe({
+          databaseUrl: config.databaseUrl,
+          telegramId: userId,
+          telegramHandle: ctx.from?.username,
+          preferredName: ctx.from?.first_name,
+          input: state.pendingInput,
+          output: replyText,
+          mode: "disambiguation"
+        });
         return;
       }
     }
@@ -499,6 +539,15 @@ bot.on("message:text", async (ctx) => {
     setGuidedStage(userId, guided.nextStage);
     await ctx.reply(guided.text);
     appendInteraction(userId, text, guided.text);
+    await logInteractionSafe({
+      databaseUrl: config.databaseUrl,
+      telegramId: userId,
+      telegramHandle: ctx.from?.username,
+      preferredName: ctx.from?.first_name,
+      input: text,
+      output: guided.text,
+      mode: "guided"
+    });
     return;
   }
 
@@ -550,19 +599,15 @@ bot.on("message:text", async (ctx) => {
   await ctx.reply(finalOutput);
   appendInteraction(userId, text, finalOutput);
 
-  await recordInteraction(config.databaseUrl, {
+  await logInteractionSafe({
+    databaseUrl: config.databaseUrl,
     telegramId: userId,
     telegramHandle: ctx.from?.username,
     preferredName: ctx.from?.first_name,
-    channel: "telegram",
-    type: "chat",
+    input: text,
+    output: finalOutput,
     mode: "free_text",
-    state: session.disambiguation ? "awaiting_disambiguation" : "normal",
-    inputTextRaw: text,
-    inputTextNormalized: normalized.hanzi,
-    inputPinyinNormalized: normalized.canonicalPinyin,
-    missingTone: normalized.missingTone,
-    outputText: finalOutput
+    state: session.disambiguation ? "awaiting_disambiguation" : "normal"
   });
 });
 
