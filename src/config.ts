@@ -1,5 +1,6 @@
 export type Config = {
   telegramBotToken: string;
+  telegramAdminChatId?: string;
   databaseUrl: string;
   llmApiKey?: string;
   llmProvider?: string;
@@ -25,6 +26,7 @@ function envBool(name: string, fallback = false): boolean {
 export function loadConfig(): Config {
   return {
     telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
+    telegramAdminChatId: process.env.TELEGRAM_ADMIN_CHAT_ID,
     databaseUrl: requireEnv("DATABASE_URL"),
     llmApiKey: process.env.LLM_API_KEY,
     llmProvider: process.env.LLM_PROVIDER,
