@@ -34,6 +34,7 @@ Use JSON logs with required fields:
 - Track latency_ms p95 to identify slow paths.
 
 ## 4. Good Practice (Future)
-- Define log retention policy (e.g., 30-90 days).
+- Define log retention policy (90 days default).
+- Use /api/retention cron to purge interactions older than INTERACTIONS_RETENTION_DAYS; protect with RETENTION_SECRET.
 - Redact PII in logs.
 - Add sampling for non-error logs if volume grows.

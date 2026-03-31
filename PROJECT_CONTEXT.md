@@ -318,6 +318,7 @@ Validate output after LLM generation. Prompt-only enforcement is insufficient.
   - tokens
   - latency
   - fallback reason
+- retention: /api/retention cron purges interactions older than INTERACTIONS_RETENTION_DAYS (default 90)
 
 ---
 
