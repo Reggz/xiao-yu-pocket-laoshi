@@ -22,6 +22,8 @@ This is the authoritative checklist for production-ready deployment. Follow in o
 - `LLM_PROVIDER`
 - `LLM_MODEL`
 - `LLM_DISABLE_CAPS`
+- `INTERACTIONS_RETENTION_DAYS` (default 90)
+- `RETENTION_SECRET` (protects /api/retention)
 
 ## 5) Deploy Staging
 - Push branch → Vercel staging deploy
@@ -58,3 +60,4 @@ This is the authoritative checklist for production-ready deployment. Follow in o
 - Always test staging before production.
 - If only you are the user, you can delay staging, but risk breaking production.
 - Admin testing: set `LLM_DISABLE_CAPS=true` in staging.
+- Retention: /api/retention runs weekly via Vercel cron; set `RETENTION_SECRET` to prevent public access.

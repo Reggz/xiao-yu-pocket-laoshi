@@ -47,6 +47,8 @@ Shared:
 - LLM_MODEL=gpt-4.1-mini
 - LLM_BASE_URL (optional)
 - LLM_DISABLE_CAPS=false
+- INTERACTIONS_RETENTION_DAYS=90
+- RETENTION_SECRET=
 
 Staging uses staging tokens + DB URL.
 Production uses production tokens + DB URL.
@@ -94,6 +96,10 @@ Note: In production, webhook should point to the Vercel route that receives upda
 - Cron inside Supabase to call your scheduler endpoint.
 
 ---
+
+## 7.1 Retention Cleanup
+- Vercel cron calls /api/retention weekly (see vercel.json).
+- Protected by RETENTION_SECRET.
 
 ## 8. Staging Workflow
 1. Push code to GitHub.
