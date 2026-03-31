@@ -61,3 +61,8 @@ This is the authoritative checklist for production-ready deployment. Follow in o
 - If only you are the user, you can delay staging, but risk breaking production.
 - Admin testing: set `LLM_DISABLE_CAPS=true` in staging.
 - Retention: /api/retention runs weekly via Vercel cron; set `RETENTION_SECRET` to prevent public access.
+
+### Manual Retention Trigger
+```
+curl -s "https://<your-domain>/api/retention?secret=<your-secret>"
+```
