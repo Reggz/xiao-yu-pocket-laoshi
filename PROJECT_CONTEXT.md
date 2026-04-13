@@ -39,7 +39,7 @@ The contents are based on the actual repository state, PRD, architecture docs, a
 ### 1.1 What the system does
 Xiao Yu is a Telegram-based Mandarin practice bot for English speakers. It provides:
 - Casual, real-time conversation practice
-- Daily micro-drills (MCQ, fill-in, tone selection)
+- Daily micro-drills (MCQ-only: vocab, grammar, tone)
 - Immediate corrections and hints
 - Spaced repetition for retention
 
@@ -51,7 +51,7 @@ Xiao Yu is a Telegram-based Mandarin practice bot for English speakers. It provi
   - Pinyin with tone marks
   - Pinyin without tones
   - Mixed Chinese + English
-- Bot responds in Mandarin, optionally with English explanation.
+- Bot responds in Chinese + pinyin with tone marks + English; explanations are bilingual.
 - Unknown English words are turned into auto-hints (`炒饭` for “fried rice”).
 - Incorrect characters are corrected with an explanation.
 

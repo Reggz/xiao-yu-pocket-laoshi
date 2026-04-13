@@ -5,6 +5,7 @@ describe("hints", () => {
   it("builds auto hint", () => {
     const hint = buildAutoHint("fried rice", "炒饭", "chao3 fan4");
     expect(hint.message).toContain("炒饭");
+    expect(hint.message).toContain("chǎo fàn");
   });
 
   it("builds correction hint", () => {

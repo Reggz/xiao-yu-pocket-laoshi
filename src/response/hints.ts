@@ -1,10 +1,13 @@
+import { toToneMarks } from "./pinyin";
+
 export type Hint = {
   message: string;
 };
 
 export function buildAutoHint(english: string, hanzi: string, pinyin: string): Hint {
+  const formatted = toToneMarks(pinyin);
   return {
-    message: `\`${english}\` 可以说 \`${hanzi}\` (${pinyin}).`
+    message: `\`${english}\` 可以说 \`${hanzi}\` (${formatted}).`
   };
 }
 

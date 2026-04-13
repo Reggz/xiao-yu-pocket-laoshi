@@ -37,6 +37,7 @@ import { validateTopicSelection } from "./onboarding/topics";
 import { logInteractionSafe } from "./storage/logging";
 import { createLlmAdapter } from "./llm/factory";
 import { generateResponse } from "./response/engine";
+import { toToneMarks } from "./response/pinyin";
 import { selectAllowedGrammar } from "./response/grammar";
 import { initBudget } from "./llm/manager";
 import { buildMicroDrill, buildToneDrill } from "./drills/quick";
@@ -117,17 +118,21 @@ function isExplainIntent(text: string): boolean {
 }
 
 function buildHelpResponse(): string {
+  const pinyin = toToneMarks("mei2 guan1 xi, wo3 ke3 yi3 bang1 zhu4 ni3. ni3 ke3 yi3 shuo1: ni3 hao3 / wo3 jiao4… / wo3 hen3 hao3");
   return (
     "没关系，我可以帮助你。你可以说：你好 / 我叫… / 我很好。\n" +
-    "mei2 guan1 xi, wo3 ke3 yi3 bang1 zhu4 ni3. ni3 ke3 yi3 shuo1: ni3 hao3 / wo3 jiao4… / wo3 hen3 hao3.\n" +
+    pinyin +
+    "\n" +
     "No worries, I can help. You can say: hello / my name is… / I’m good."
   );
 }
 
 function buildExplainResponse(): string {
+  const pinyin = toToneMarks("ke3 yi3 de. qing3 gao4 su4 wo3 ni3 xiang3 jie3 shi4 de ci2 huo4 ju4 zi.");
   return (
     "可以的。请告诉我你想解释的词或句子。\n" +
-    "ke3 yi3 de. qing3 gao4 su4 wo3 ni3 xiang3 jie3 shi4 de ci2 huo4 ju4 zi.\n" +
+    pinyin +
+    "\n" +
     "Sure. Tell me the word or sentence you want explained."
   );
 }

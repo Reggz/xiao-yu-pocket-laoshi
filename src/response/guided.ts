@@ -1,4 +1,5 @@
 import { Curriculum } from "../curriculum/types";
+import { toToneMarks } from "./pinyin";
 import { getUnitsForLevel, getUnitsByTopic } from "../curriculum/helpers";
 import { UserSessionState } from "../bot/state";
 
@@ -12,7 +13,7 @@ const FEELING_PATTERNS = [/\bwo\s+hen\s+hao\b/i, /i\s*'?m\s*good/i, /fine/i];
 const LIKE_PATTERNS = [/\bwo\s+xi\s*huan\b/i, /i\s+like/i];
 
 function buildLine(hanzi: string, pinyin: string, english: string): string {
-  return `${hanzi}\n${pinyin}\n${english}`;
+  return `${hanzi}\n${toToneMarks(pinyin)}\n${english}`;
 }
 
 function detectTopicPreference(input: string, topics: string[]): string | null {

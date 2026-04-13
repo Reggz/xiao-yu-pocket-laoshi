@@ -1,4 +1,5 @@
 import { Curriculum, CurriculumItem } from "../curriculum/types";
+import { extractToneNumber, toToneMarks } from "../response/pinyin";
 
 export type DrillQuestion = {
   id: string;
@@ -49,13 +50,12 @@ export function buildToneDrill(curriculum: Curriculum): DrillQuestion | null {
   const target = pickRandom(items);
   if (!target) return null;
 
-  const match = target.pinyin.match(/[1-5]/);
-  if (!match) return null;
-  const tone = match[0];
+  const tone = extractToneNumber(target.pinyin);
+  if (!tone) return null;
 
   return {
     id: `tone_${Date.now()}`,
-    prompt: `What tone is used in “${target.pinyin}” for “${target.hanzi}”?`,
+    prompt: `What tone is used in “${toToneMarks(target.pinyin)}” for “${target.hanzi}”?`,
     options: ["1", "2", "3", "4"],
     answer: tone
   };

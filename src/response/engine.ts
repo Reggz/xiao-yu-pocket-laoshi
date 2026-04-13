@@ -5,6 +5,7 @@ import { generateWithGuardrails } from "./llm";
 import { buildConversationBuffer, InteractionSnippet } from "./buffer";
 import { Budget } from "../llm/throttle";
 import { shouldUseLlm, consumeLlm, LlmPolicy } from "../llm/manager";
+import { formatPinyinLine, toToneMarks } from "./pinyin";
 
 export type ResponseContext = {
   curriculum: Curriculum;
@@ -25,6 +26,18 @@ export type ResponseResult = {
 
 const BOT_NAME = "Xiao Yu";
 
+function formatLlmOutput(text: string): string {
+  const lines = text
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length >= 2) {
+    lines[1] = formatPinyinLine(lines[1]);
+    return lines.slice(0, 3).join("\n");
+  }
+  return formatPinyinLine(text.trim());
+}
+
 export async function generateResponse(
   adapter: LlmAdapter | null,
   userText: string,
@@ -38,7 +51,7 @@ export async function generateResponse(
   );
 
   const fallback = template
-    ? `${template.hanzi}\n${template.pinyin}\n${template.english}`
+    ? `${template.hanzi}\n${toToneMarks(template.pinyin)}\n${template.english}`
     : "好的。";
 
   if (!adapter) {
@@ -56,7 +69,7 @@ export async function generateResponse(
 
   const prompt =
     `You are ${BOT_NAME} (小语), a Mandarin tutor.\n` +
-    "Always respond in exactly 3 lines: (1) Chinese, (2) pinyin with tone numbers, (3) English.\n" +
+    "Always respond in exactly 3 lines: (1) Chinese, (2) pinyin with tone marks, (3) English.\n" +
     "Keep sentences short, beginner-friendly, and level-appropriate.\n" +
     "If the user asks for an explanation, provide a short bilingual explanation.\n" +
     `${history}\nUser: ${userText}\nBot:`;
@@ -67,7 +80,7 @@ export async function generateResponse(
       allowOneNonCritical: true
     });
     const newBudget = consumeLlm(context.llmPolicy, context.budget);
-    return { text, usedLlm: true, budget: newBudget };
+    return { text: formatLlmOutput(text), usedLlm: true, budget: newBudget };
   } catch (err) {
     return { text: fallback, usedLlm: false, budget: context.budget };
   }

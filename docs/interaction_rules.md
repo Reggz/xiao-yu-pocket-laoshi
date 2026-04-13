@@ -28,6 +28,7 @@
 - Enforce grammar_patterns whitelist per level; no complex conjunctions.
 - Grammar tiers: critical, core, advanced. Allow at most one non-critical grammar per response.
 - LLM may paraphrase but cannot introduce out-of-level items.
+- Output format for tutor responses: Chinese, pinyin with tone marks, English (except MCQ prompts).
 - Keep responses short and conversational.
 - LLM context includes the last 3-5 interactions with a strict token cap.
 - If context exceeds budget, fall back to templates without LLM.
@@ -44,16 +45,11 @@
 - Use correct_count to set starting level and unlock units.
 
 ## 3.3 Practice Modes and Scoring
-Micro-drill MCQ:
+Micro-drill MCQ (default):
+- Vocabulary MCQ, grammar MCQ, tone MCQ.
 - Full scoring weight (1.0).
-- Accept short Mandarin, pinyin, or English answers.
-Fill in the blank:
-- Full scoring weight (1.0).
-- Accept pinyin or characters as correct.
-Tone selection:
-- Full scoring weight (1.0).
-- Tone errors logged explicitly.
-Free-text mini conversation:
+- Answers via buttons only.
+Advanced free chat (optional):
 - Partial scoring weight (0.3-0.5).
 - To score, require at least 50% of tokens in the target language (Mandarin or pinyin).
 - Mixed input scores only the Mandarin portions.

@@ -58,7 +58,7 @@ Scoring and placement (example): 4-5 correct unlock A2 content.
 - Use topics to guide vocabulary exposure and reinforcement.
 
 ## 5.3 How to Use the Bot (Navigation)
-- Users can initiate free-text practice at any time.
+- Advanced free chat is available via the menu but is not the default entry point.
 - Menu access (e.g., typing `menu`) lets users switch modes, update preferences, pause/resume, get support, or delete account.
 - Help phrases such as "please explain" or "我不知道" trigger clarification.
 
@@ -129,7 +129,7 @@ Note: The bot avoids advanced vocabulary and past tense patterns, keeping A0 out
 - Observability reference: `/Users/reginald/Documents/Xiao Yu - Pocket Lao Shi/docs/observability.md`
 
 ## 10. Key Features
-Practice Modes: micro-drill MCQ, fill in the blank, tone selection, free-text mini conversation.
+Practice Modes: MCQ-only drills (vocab, grammar, tone) and advanced free chat (optional).
 Mode Navigation: menu to enter/exit modes at any time and access settings/upgrade.
 Learning Engine: level-gated responses, Level + 1 exposure with auto-hints, spaced repetition scheduling, exploratory vocab curation, mode-specific scoring weights.
 Grammar Guardrails: grammar_patterns whitelist per level, avoid complex conjunctions in LLM prompts.
@@ -137,6 +137,7 @@ Grammar Guardrails: grammar_patterns whitelist per level, avoid complex conjunct
 Topic Routing: unit-level topic tags inherited by items/templates, configurable topic bias ratio, fallback to general content when topic pool is too small.
 Feedback and Hints: auto-hint for new items, correction hints with short explanations, session summaries and progress tracking.
 Response Strategy: hybrid response engine (template-first, LLM fallback), caching with validation for stable prompts.
+Output Format: Chinese + pinyin with tone marks + English for tutor responses (except MCQ prompts).
 Response Context: use last 3-5 interactions with a strict token cap; fall back to templates when over budget.
 Scheduling: daily micro-drills, event-based pings, configurable session length, three daily session windows, default check-in times.
 Onboarding: optional placement micro-challenges to set starting level.

@@ -3,6 +3,7 @@
 ## Format Guidelines
 - Each Unit includes: title, topic tag, vocab list, phrases, templates, grammar.
 - Use simplified characters, pinyin, and English gloss.
+- Store pinyin with tone numbers (canonical); runtime converts to tone marks for display.
 - Topic tags should be coarse (e.g., Self-Intro, Food/Drink, Daily Routine, Numbers/Quantity, Location, Work, Small Talk).
 - Grammar lines include a tier: critical | core | advanced.
 - This file is the source for candidate resolution. The input engine builds a pinyin→hanzi index from vocab/phrases/templates here.
