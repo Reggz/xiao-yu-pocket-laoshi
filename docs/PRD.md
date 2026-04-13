@@ -52,13 +52,10 @@ Scoring and placement (example): 0-1 correct start at Unit 1 (A0).
 Scoring and placement (example): 2-3 correct start at Unit 5 (late A1).
 Scoring and placement (example): 4-5 correct unlock A2 content.
 
-## 5.2 Topic-Based Learning
-- Ask users for 1-3 topics of interest (food ordering, taxis, small talk, sports, work).
-- Prioritize drills and conversation templates aligned with those topics.
-- Use topics to guide vocabulary exposure and reinforcement.
-
 ## 5.3 How to Use the Bot (Navigation)
-- Advanced free chat is available via the menu but is not the default entry point.
+- First message shows a welcome menu with: Placement (recommended), Start Drill, Advanced Free Chat.
+- Returning users see: Start Drill (recommended), Advanced Free Chat, Settings.
+- Free chat is optional and not the default entry point.
 - Menu access (e.g., typing `menu`) lets users switch modes, update preferences, pause/resume, get support, or delete account.
 - Help phrases such as "please explain" or "我不知道" trigger clarification.
 
@@ -133,6 +130,7 @@ Practice Modes: MCQ-only drills (vocab, grammar, tone) and advanced free chat (o
 Mode Navigation: menu to enter/exit modes at any time and access settings/upgrade.
 Learning Engine: level-gated responses, Level + 1 exposure with auto-hints, spaced repetition scheduling, exploratory vocab curation, mode-specific scoring weights.
 Grammar Guardrails: grammar_patterns whitelist per level, avoid complex conjunctions in LLM prompts.
+Drill Sessions: default 5 MCQ turns per session, with summary at the end.
 - Grammar tiers: critical, core, advanced. Allow at most one non-critical grammar per response.
 Topic Routing: unit-level topic tags inherited by items/templates, configurable topic bias ratio, fallback to general content when topic pool is too small.
 Feedback and Hints: auto-hint for new items, correction hints with short explanations, session summaries and progress tracking.

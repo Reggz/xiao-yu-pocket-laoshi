@@ -7,6 +7,8 @@ import { buildAutoHint, buildCorrectionHint } from "./response/hints";
 import {
   appendInteraction,
   clearDisambiguation,
+  getActiveMode,
+  getDrillSession,
   getLevel,
   getSession,
   getTopicBiasRatio,
@@ -16,16 +18,16 @@ import {
   isOnboardingComplete,
   isPaused,
   resetSession,
+  setActiveMode,
   setDisambiguation,
-  setGuidedStage,
+  setDrillSession,
   setLevel,
   setOnboardingComplete,
-  setOnboardingPrompted,
   setPaused,
   setPendingDrill,
   setTopicBiasRatio,
   setTopics,
-  shouldSendOnboardingPrompt,
+  shouldSendMenuPrompt,
   shouldSendPausedPrompt,
   startPlacement,
   stopPlacement,
@@ -40,9 +42,8 @@ import { generateResponse } from "./response/engine";
 import { toToneMarks } from "./response/pinyin";
 import { selectAllowedGrammar } from "./response/grammar";
 import { initBudget } from "./llm/manager";
-import { buildMicroDrill, buildToneDrill } from "./drills/quick";
+import { buildGrammarDrill, buildMicroDrill, buildToneDrill } from "./drills/quick";
 import { placementQuestions, evaluatePlacementAnswer, scorePlacement } from "./onboarding/placement";
-import { getGuidedReply } from "./response/guided";
 
 const config = loadConfig();
 const curriculum = loadCurriculumFromFile("docs/curriculum_seed.md");
@@ -97,6 +98,104 @@ function buildOnboardingKeyboard(): InlineKeyboard {
   keyboard.text("Start Placement", "onboard:placement");
   keyboard.text("Skip", "onboard:skip");
   return keyboard;
+
+}
+
+function buildEntryMenuKeyboard(): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  keyboard.text("Placement (Recommended)", "menu:placement");
+  keyboard.text("Start Drill", "menu:drill");
+  keyboard.text("Advanced Free Chat", "menu:free_chat");
+  return keyboard;
+}
+
+function buildReturnMenuKeyboard(): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  keyboard.text("Start Drill", "menu:drill");
+  keyboard.text("Advanced Free Chat", "menu:free_chat");
+  keyboard.text("Settings", "menu:settings");
+  return keyboard;
+}
+
+async function sendEntryMenu(ctx: any, userId: string): Promise<void> {
+  const message =
+    "Hi, I’m Xiao Yu — your pocket laoshi.\n" +
+    "Choose how you want to start:";
+  await ctx.reply(message, { reply_markup: buildEntryMenuKeyboard() });
+  setActiveMode(userId, "menu");
+}
+
+async function sendReturnMenu(ctx: any, userId: string): Promise<void> {
+  const message = "Ready for today’s practice?";
+  await ctx.reply(message, { reply_markup: buildReturnMenuKeyboard() });
+  setActiveMode(userId, "menu");
+}
+
+function buildSettingsMessage(): string {
+  return (
+    "Settings:\n" +
+    "- /topics Food/Drink, Work\n" +
+    "- /bias 0.7\n" +
+    "- /pause or /resume\n" +
+    "- /reset"
+  );
+}
+
+function initDrillSession(total = 5) {
+  return { total, remaining: total, correct: 0, items: [] as string[] };
+}
+
+async function sendNextDrill(ctx: any, userId: string): Promise<void> {
+  const session = getSession(userId);
+  const drillSession = session.drillSession;
+  if (!drillSession || drillSession.remaining <= 0) return;
+
+  const roll = Math.random();
+  let question = null;
+  if (roll < 0.7) {
+    question = buildMicroDrill(curriculum);
+  } else if (roll < 0.9) {
+    question = buildGrammarDrill(curriculum);
+  } else {
+    question = buildToneDrill(curriculum);
+  }
+
+  if (!question) {
+    question = buildMicroDrill(curriculum) || buildGrammarDrill(curriculum) || buildToneDrill(curriculum);
+  }
+  if (!question) {
+    await ctx.reply("No drills available yet.");
+    setDrillSession(userId, undefined);
+    return;
+  }
+
+  setPendingDrill(userId, question);
+  await ctx.reply(question.prompt, { reply_markup: buildDrillKeyboard(question.options) });
+}
+
+async function startDrillSession(ctx: any, userId: string): Promise<void> {
+  setActiveMode(userId, "drill");
+  setDrillSession(userId, initDrillSession(5));
+  await sendNextDrill(ctx, userId);
+}
+
+function buildDrillSummary(userId: string): string {
+  const session = getDrillSession(userId);
+  if (!session) return "Session complete.";
+  const items = session.items.slice(0, 4);
+  const itemsLine = items.length ? `Reviewed: ${items.join(" · ")}` : "Reviewed: (none)";
+  return (
+    `Session complete. Score: ${session.correct}/${session.total}.\n` +
+    `${itemsLine}`
+  );
+}
+
+async function finishDrillSession(ctx: any, userId: string): Promise<void> {
+  const summary = buildDrillSummary(userId);
+  await ctx.reply(summary);
+  setDrillSession(userId, undefined);
+  await sendReturnMenu(ctx, userId);
+}
 }
 
 function buildLlmPolicy() {
@@ -167,15 +266,9 @@ bot.command("start", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
   setOnboardingComplete(from.id.toString(), false);
-  setOnboardingPrompted(from.id.toString(), false);
   stopPlacement(from.id.toString());
-  await ctx.reply(
-    "Welcome to Xiao Yu!\n" +
-      "- You can type Mandarin, pinyin (with or without tones), or mix English.\n" +
-      "- Set topics with /topics Food/Drink, Work\n" +
-      "Would you like a short placement test?",
-    { reply_markup: buildOnboardingKeyboard() }
-  );
+  setActiveMode(from.id.toString(), undefined);
+  await sendEntryMenu(ctx, from.id.toString());
 });
 
 bot.command("done", async (ctx) => {
@@ -184,6 +277,12 @@ bot.command("done", async (ctx) => {
   setOnboardingComplete(from.id.toString(), true);
   stopPlacement(from.id.toString());
   await ctx.reply("Onboarding complete. Send a message to begin.");
+bot.command("done", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  setOnboardingComplete(from.id.toString(), true);
+  stopPlacement(from.id.toString());
+  await sendReturnMenu(ctx, from.id.toString());
 });
 
 bot.command("skip", async (ctx) => {
@@ -191,14 +290,8 @@ bot.command("skip", async (ctx) => {
   if (!from) return;
   setOnboardingComplete(from.id.toString(), true);
   stopPlacement(from.id.toString());
-  await ctx.reply("Skipped onboarding. Send a message to begin.");
+  await sendReturnMenu(ctx, from.id.toString());
 });
-
-bot.command("placement", async (ctx) => {
-  const from = ctx.from;
-  if (!from) return;
-  startPlacement(from.id.toString());
-  const prompt = currentPlacementPrompt(0);
   if (prompt) {
     await ctx.reply(`Placement Q1: ${prompt}`);
   }
@@ -231,25 +324,27 @@ bot.command("drill", async (ctx) => {
   await sendMicroDrill(ctx, from.id.toString());
 });
 
+bot.command("drill", async (ctx) => {
+  const from = ctx.from;
+  if (!from) return;
+  setOnboardingComplete(from.id.toString(), true);
+  await startDrillSession(ctx, from.id.toString());
+});
+
 bot.command("tone", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
+  setOnboardingComplete(from.id.toString(), true);
   await sendToneDrill(ctx, from.id.toString());
 });
 
 bot.command("ping", (ctx) => ctx.reply("pong"));
 
 bot.command("menu", async (ctx) => {
-  const lines = ["Menu:", ...menuOptions.map((m) => `- ${m.label}`)];
-  await ctx.reply(lines.join("\n"));
-  await ctx.reply("Commands: /drill for Micro-Drills, /tone for Tone Practice, /pause to pause.");
-});
-
-bot.command("topics", async (ctx) => {
-  const msg = ctx.message;
   const from = ctx.from;
-  if (!msg?.text || !from) {
-    await ctx.reply("Send topics as comma-separated list. Example: /topics Food/Drink, Work");
+  if (!from) return;
+  await sendReturnMenu(ctx, from.id.toString());
+});
     return;
   }
   const input = msg.text.replace("/topics", "").trim();
@@ -304,6 +399,37 @@ bot.on("callback_query:data", async (ctx) => {
     }
   }
 
+  if (data.startsWith("menu:")) {
+    const userId = ctx.from?.id?.toString();
+    if (!userId) return;
+    await ctx.answerCallbackQuery();
+    if (data === "menu:placement") {
+      startPlacement(userId);
+      setActiveMode(userId, undefined);
+      const prompt = currentPlacementPrompt(0);
+      if (prompt) {
+        await ctx.reply(`Placement Q1: ${prompt}`);
+      }
+      return;
+    }
+    if (data === "menu:drill") {
+      setOnboardingComplete(userId, true);
+      await startDrillSession(ctx, userId);
+      return;
+    }
+    if (data === "menu:free_chat") {
+      setOnboardingComplete(userId, true);
+      setActiveMode(userId, "free_chat");
+      await ctx.reply("Advanced free chat enabled. Send a message.");
+      return;
+    }
+    if (data === "menu:settings") {
+      await ctx.reply(buildSettingsMessage());
+      setActiveMode(userId, "menu");
+      return;
+    }
+  }
+
   if (data.startsWith("drill:")) {
     const userId = ctx.from?.id?.toString();
     if (!userId) return;
@@ -317,6 +443,18 @@ bot.on("callback_query:data", async (ctx) => {
     setPendingDrill(userId, undefined);
     await ctx.answerCallbackQuery();
     await ctx.reply(correct ? "Correct!" : `Not quite. Answer: ${drill.answer}`);
+
+    const drillSession = getDrillSession(userId);
+    if (drillSession) {
+      drillSession.remaining -= 1;
+      if (correct) drillSession.correct += 1;
+      if (drill.target) drillSession.items.push(drill.target);
+      if (drillSession.remaining <= 0) {
+        await finishDrillSession(ctx, userId);
+        return;
+      }
+      await sendNextDrill(ctx, userId);
+    }
     return;
   }
 
@@ -379,19 +517,13 @@ bot.on("message:text", async (ctx) => {
   const lower = trimmed.toLowerCase();
 
   if (MICRO_DRILL_ALIASES.has(lower)) {
-    if (!isOnboardingComplete(userId)) {
-      await ctx.reply("Please complete onboarding first with /start.");
-      return;
-    }
-    await sendMicroDrill(ctx, userId);
+    setOnboardingComplete(userId, true);
+    await startDrillSession(ctx, userId);
     return;
   }
 
   if (TONE_DRILL_ALIASES.has(lower)) {
-    if (!isOnboardingComplete(userId)) {
-      await ctx.reply("Please complete onboarding first with /start.");
-      return;
-    }
+    setOnboardingComplete(userId, true);
     await sendToneDrill(ctx, userId);
     return;
   }
@@ -401,7 +533,7 @@ bot.on("message:text", async (ctx) => {
     if (SKIP_ALIASES.has(lower)) {
       setOnboardingComplete(userId, true);
       stopPlacement(userId);
-      await ctx.reply("Skipped placement. Send a message to begin.");
+      await sendReturnMenu(ctx, userId);
       return;
     }
     const q = placementQuestions[placement.index];
@@ -410,7 +542,7 @@ bot.on("message:text", async (ctx) => {
       setLevel(userId, level);
       setOnboardingComplete(userId, true);
       stopPlacement(userId);
-      await ctx.reply(`Placement complete. Starting at ${level}. Send a message to begin.`);
+      await sendReturnMenu(ctx, userId);
       return;
     }
     const correct = evaluatePlacementAnswer(text, q.expectedKeywords);
@@ -423,7 +555,7 @@ bot.on("message:text", async (ctx) => {
       setLevel(userId, level);
       setOnboardingComplete(userId, true);
       stopPlacement(userId);
-      await ctx.reply(`Placement complete. Starting at ${level}. Send a message to begin.`);
+      await sendReturnMenu(ctx, userId);
     }
     return;
   }
@@ -440,7 +572,7 @@ bot.on("message:text", async (ctx) => {
   if (!isOnboardingComplete(userId) && SKIP_ALIASES.has(lower)) {
     setOnboardingComplete(userId, true);
     stopPlacement(userId);
-    await ctx.reply("Skipped onboarding. Send a message to begin.");
+    await sendReturnMenu(ctx, userId);
     return;
   }
 
@@ -453,8 +585,25 @@ bot.on("message:text", async (ctx) => {
   }
 
   if (!isOnboardingComplete(userId)) {
-    if (shouldSendOnboardingPrompt(userId, now)) {
-      await ctx.reply("Please complete onboarding with /start, or type 'placement' to begin.");
+    if (shouldSendMenuPrompt(userId, now)) {
+      await sendEntryMenu(ctx, userId);
+    }
+    return;
+  }
+  const activeMode = getActiveMode(userId);
+  const drillSession = getDrillSession(userId);
+  if (drillSession) {
+    if (getPendingDrill(userId)) {
+      await ctx.reply("Please select an option above.");
+      return;
+    }
+    await sendNextDrill(ctx, userId);
+    return;
+  }
+
+  if (activeMode !== "free_chat") {
+    if (shouldSendMenuPrompt(userId, now)) {
+      await sendReturnMenu(ctx, userId);
     }
     return;
   }
@@ -488,7 +637,6 @@ bot.on("message:text", async (ctx) => {
     });
     return;
   }
-
   const safety = checkSafety(text);
   if (safety.blocked) {
     await ctx.reply(safetyResponse());
@@ -539,22 +687,6 @@ bot.on("message:text", async (ctx) => {
     }
   }
 
-  const guided = getGuidedReply(text, session, curriculum);
-  if (guided) {
-    setGuidedStage(userId, guided.nextStage);
-    await ctx.reply(guided.text);
-    appendInteraction(userId, text, guided.text);
-    await logInteractionSafe({
-      databaseUrl: config.databaseUrl,
-      telegramId: userId,
-      telegramHandle: ctx.from?.username,
-      preferredName: ctx.from?.first_name,
-      input: text,
-      output: guided.text,
-      mode: "guided"
-    });
-    return;
-  }
 
   const { normalized, candidates, corrections, englishHints } = runInputPipeline(text);
 

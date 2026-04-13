@@ -1,4 +1,4 @@
-import { Curriculum, CurriculumItem } from "../curriculum/types";
+import { Curriculum, CurriculumItem, GrammarItem } from "../curriculum/types";
 import { extractToneNumber, toToneMarks } from "../response/pinyin";
 
 export type DrillQuestion = {
@@ -6,6 +6,8 @@ export type DrillQuestion = {
   prompt: string;
   options: string[];
   answer: string;
+  type: "vocab" | "grammar" | "tone";
+  target?: string;
 };
 
 function pickRandom<T>(items: T[]): T | null {
@@ -14,11 +16,24 @@ function pickRandom<T>(items: T[]): T | null {
   return items[idx];
 }
 
-export function buildMicroDrill(curriculum: Curriculum): DrillQuestion | null {
+function collectVocab(curriculum: Curriculum): CurriculumItem[] {
   const items: CurriculumItem[] = [];
   for (const unit of curriculum.units) {
     items.push(...unit.vocab);
   }
+  return items;
+}
+
+function collectGrammar(curriculum: Curriculum): GrammarItem[] {
+  const items: GrammarItem[] = [];
+  for (const unit of curriculum.units) {
+    items.push(...unit.grammar);
+  }
+  return items;
+}
+
+export function buildMicroDrill(curriculum: Curriculum): DrillQuestion | null {
+  const items = collectVocab(curriculum);
   if (items.length < 4) return null;
 
   const target = pickRandom(items);
@@ -37,15 +52,40 @@ export function buildMicroDrill(curriculum: Curriculum): DrillQuestion | null {
     id: `micro_${Date.now()}`,
     prompt: `What does “${target.hanzi}” mean?`,
     options: Array.from(options),
-    answer: target.english
+    answer: target.english,
+    type: "vocab",
+    target: target.hanzi
+  };
+}
+
+export function buildGrammarDrill(curriculum: Curriculum): DrillQuestion | null {
+  const items = collectGrammar(curriculum);
+  if (items.length < 4) return null;
+
+  const target = pickRandom(items);
+  if (!target) return null;
+
+  const distractors = items.filter((i) => i.english !== target.english);
+  const options = new Set<string>();
+  options.add(target.hanzi);
+  while (options.size < 4) {
+    const d = pickRandom(distractors);
+    if (!d) break;
+    options.add(d.hanzi);
+  }
+
+  return {
+    id: `grammar_${Date.now()}`,
+    prompt: `Which grammar matches “${target.english}”?`,
+    options: Array.from(options),
+    answer: target.hanzi,
+    type: "grammar",
+    target: target.hanzi
   };
 }
 
 export function buildToneDrill(curriculum: Curriculum): DrillQuestion | null {
-  const items: CurriculumItem[] = [];
-  for (const unit of curriculum.units) {
-    items.push(...unit.vocab);
-  }
+  const items = collectVocab(curriculum);
   if (!items.length) return null;
   const target = pickRandom(items);
   if (!target) return null;
@@ -57,6 +97,8 @@ export function buildToneDrill(curriculum: Curriculum): DrillQuestion | null {
     id: `tone_${Date.now()}`,
     prompt: `What tone is used in “${toToneMarks(target.pinyin)}” for “${target.hanzi}”?`,
     options: ["1", "2", "3", "4"],
-    answer: tone
+    answer: tone,
+    type: "tone",
+    target: target.hanzi
   };
 }

@@ -99,5 +99,8 @@
 - Onboarding gate added: /start sets onboarding state, /done or /skip unlocks normal chat; LLM use is blocked until onboarding complete.
 - Webhook de-dup added using update_id TTL to prevent duplicate replies.
 - Power controls added: /pause, /resume, /reset with pause gating and session reset behavior.
+- Entry menu on first message (placement recommended, drill, free chat); returning menu (drill, free chat, settings).
+- Drill sessions are 5 MCQ turns with end summary; free chat requires explicit selection.
+- Guided flow removed in favor of drill-first UX.
 - MVP drills are MCQ-only (vocab/grammar/tone); fill-in deferred.
 - Output uses pinyin tone marks for display; tone numbers still accepted as input.

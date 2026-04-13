@@ -34,6 +34,10 @@
 - If context exceeds budget, fall back to templates without LLM.
  - Level + 1 hinting: allow up to ~10% unlearned tokens per session with auto-hints.
 
+- Entry menu shown on first interaction: Placement (recommended), Start Drill, Advanced Free Chat.
+- Returning menu: Start Drill (recommended), Advanced Free Chat, Settings.
+- Drill sessions default to 5 MCQ turns; after completion, show summary + menu.
+- Free chat only when explicitly selected from menu.
 ## 3.1 Mode Navigation
 - Provide a menu to enter/exit practice modes at any time.
 - Allow switching modes mid-session without losing progress.
