@@ -102,14 +102,12 @@ function buildOnboardingKeyboard(): InlineKeyboard {
 }
 
 function buildEntryMenuKeyboard(): InlineKeyboard {
-function buildEntryMenuKeyboard(): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   keyboard.text("Placement (Recommended)", "menu:placement").row();
   keyboard.text("Start Drill", "menu:drill").row();
   keyboard.text("Advanced Free Chat", "menu:free_chat");
   return keyboard;
 }
-function buildReturnMenuKeyboard(): InlineKeyboard {
 function buildReturnMenuKeyboard(): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   keyboard.text("Start Drill", "menu:drill").row();
