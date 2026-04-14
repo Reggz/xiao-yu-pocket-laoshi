@@ -1,6 +1,7 @@
 import { Bot, InlineKeyboard } from "grammy";
 import { loadConfig } from "./config";
 import { loadCurriculumFromFile } from "./curriculum/loader";
+import { CurriculumItem, CurriculumUnit, GrammarItem } from "./curriculum/types";
 import { startDisambiguation, isDisambiguationExpired, resolveDisambiguation } from "./input/disambiguation";
 import { runInputPipeline } from "./input/pipeline";
 import { buildAutoHint, buildCorrectionHint } from "./response/hints";
@@ -82,41 +83,40 @@ export async function ensureBotInit(): Promise<void> {
 function buildDisambKeyboard(candidates: string[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   candidates.slice(0, 3).forEach((c) => {
-    keyboard.text(c, `disamb:${c}`);
+    keyboard.text(c, `disamb:${c}`).row();
   });
   return keyboard;
 }
 
 function buildDrillKeyboard(options: string[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  options.forEach((o) => keyboard.text(o, `drill:${o}`));
+  options.forEach((o) => keyboard.text(o, `drill:${o}`).row());
   return keyboard;
 }
 
 function buildOnboardingKeyboard(): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  keyboard.text("Start Placement", "onboard:placement");
+  keyboard.text("Start Placement", "onboard:placement").row();
   keyboard.text("Skip", "onboard:skip");
   return keyboard;
-
 }
 
 function buildEntryMenuKeyboard(): InlineKeyboard {
+function buildEntryMenuKeyboard(): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  keyboard.text("Placement (Recommended)", "menu:placement");
-  keyboard.text("Start Drill", "menu:drill");
+  keyboard.text("Placement (Recommended)", "menu:placement").row();
+  keyboard.text("Start Drill", "menu:drill").row();
   keyboard.text("Advanced Free Chat", "menu:free_chat");
   return keyboard;
 }
-
+function buildReturnMenuKeyboard(): InlineKeyboard {
 function buildReturnMenuKeyboard(): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  keyboard.text("Start Drill", "menu:drill");
-  keyboard.text("Advanced Free Chat", "menu:free_chat");
+  keyboard.text("Start Drill", "menu:drill").row();
+  keyboard.text("Advanced Free Chat", "menu:free_chat").row();
   keyboard.text("Settings", "menu:settings");
   return keyboard;
 }
-
 async function sendEntryMenu(ctx: any, userId: string): Promise<void> {
   const message =
     "Hi, I’m Xiao Yu — your pocket laoshi.\n" +
@@ -197,6 +197,67 @@ async function finishDrillSession(ctx: any, userId: string): Promise<void> {
   await sendReturnMenu(ctx, userId);
 }
 
+function findVocabTarget(hanzi: string): { unit: CurriculumUnit; item: CurriculumItem } | null {
+  for (const unit of curriculum.units) {
+    const item = unit.vocab.find((v) => v.hanzi === hanzi);
+    if (item) return { unit, item };
+  }
+  return null;
+}
+
+function findGrammarTarget(hanzi: string): { unit: CurriculumUnit; item: GrammarItem } | null {
+  for (const unit of curriculum.units) {
+    const item = unit.grammar.find((g) => g.hanzi === hanzi);
+    if (item) return { unit, item };
+  }
+  return null;
+}
+
+function findExampleForHanzi(hanzi: string): CurriculumItem | null {
+  for (const unit of curriculum.units) {
+    const template = unit.templates.find((t) => t.hanzi.includes(hanzi));
+    if (template) return template;
+    const phrase = unit.phrases.find((p) => p.hanzi.includes(hanzi));
+    if (phrase) return phrase;
+  }
+  return null;
+}
+
+function findExampleForUnit(unit: CurriculumUnit): CurriculumItem | null {
+  if (unit.templates.length) return unit.templates[0];
+  if (unit.phrases.length) return unit.phrases[0];
+  if (unit.vocab.length) return unit.vocab[0];
+  return null;
+}
+
+function buildDrillExplanation(drill: { type: string; target?: string }): string {
+  if (!drill.target) return "";
+  if (drill.type === "grammar") {
+    const found = findGrammarTarget(drill.target);
+    if (!found) return "";
+    const header = `${found.item.hanzi}\n${toToneMarks(found.item.pinyin)}\n${found.item.english}`;
+    const example = findExampleForUnit(found.unit);
+    if (!example) return header;
+    return `${header}\n\nExample:\n${example.hanzi}\n${toToneMarks(example.pinyin)}\n${example.english}`;
+  }
+
+  const found = findVocabTarget(drill.target);
+  if (!found) return "";
+  const header = `${found.item.hanzi}\n${toToneMarks(found.item.pinyin)}\n${found.item.english}`;
+  const example = findExampleForHanzi(found.item.hanzi) ?? findExampleForUnit(found.unit);
+  if (!example) {
+    const fallbackPinyin = toToneMarks(`wo3 xi3 huan ${found.item.pinyin}`);
+    return `${header}\n\nExample:\n我喜欢${found.item.hanzi}\n${fallbackPinyin}\nI like ${found.item.english}`;
+  }
+  return `${header}\n\nExample:\n${example.hanzi}\n${toToneMarks(example.pinyin)}\n${example.english}`;
+}
+
+function buildDrillFeedback(answer: string, drill: { type: string; target?: string; answer: string }, correct: boolean): string {
+  const status = correct ? "Correct!" : `Not quite. Correct answer: ${drill.answer}`;
+  const selection = `You chose: ${answer}`;
+  const explanation = buildDrillExplanation(drill);
+  return explanation ? `${status}\n${selection}\n\n${explanation}` : `${status}\n${selection}`;
+}
 function buildLlmPolicy() {
   return { maxCallsPerSession: 3, disableCaps: config.llmDisableCaps ?? false };
 }
@@ -441,7 +502,8 @@ bot.on("callback_query:data", async (ctx) => {
     const correct = answer === drill.answer;
     setPendingDrill(userId, undefined);
     await ctx.answerCallbackQuery();
-    await ctx.reply(correct ? "Correct!" : `Not quite. Answer: ${drill.answer}`);
+    const feedback = buildDrillFeedback(answer, drill, correct);
+    await ctx.reply(feedback);
 
     const drillSession = getDrillSession(userId);
     if (drillSession) {
