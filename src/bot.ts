@@ -196,7 +196,6 @@ async function finishDrillSession(ctx: any, userId: string): Promise<void> {
   setDrillSession(userId, undefined);
   await sendReturnMenu(ctx, userId);
 }
-}
 
 function buildLlmPolicy() {
   return { maxCallsPerSession: 3, disableCaps: config.llmDisableCaps ?? false };
@@ -321,12 +320,6 @@ bot.command("reset", async (ctx) => {
 bot.command("drill", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
-  await sendMicroDrill(ctx, from.id.toString());
-});
-
-bot.command("drill", async (ctx) => {
-  const from = ctx.from;
-  if (!from) return;
   setOnboardingComplete(from.id.toString(), true);
   await startDrillSession(ctx, from.id.toString());
 });
@@ -345,6 +338,12 @@ bot.command("menu", async (ctx) => {
   if (!from) return;
   await sendReturnMenu(ctx, from.id.toString());
 });
+
+bot.command("topics", async (ctx) => {
+  const msg = ctx.message;
+  const from = ctx.from;
+  if (!msg?.text || !from) {
+    await ctx.reply("Send topics as comma-separated list. Example: /topics Food/Drink, Work");
     return;
   }
   const input = msg.text.replace("/topics", "").trim();
