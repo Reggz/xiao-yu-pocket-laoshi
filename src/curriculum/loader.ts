@@ -2,17 +2,17 @@ import fs from "fs";
 import path from "path";
 import { Curriculum, CurriculumUnit, GrammarItem, GrammarTier } from "./types";
 
-const UNIT_TITLE = /^##\s+Unit\s+\d+:\s+(.+)\s+\(Topic:\s+(.+)\)$/;
-const LEVEL_LINE = /^Level:\s+(.+)$/;
-const ITEM_LINE = /^-\s+(.+)\s+\|\s+(.+)\s+\|\s+(.+)$/;
-const GRAMMAR_LINE = /^-\s+(.+)\s+\|\s+(.+)\s+\|\s+(.+)\s+\|\s+(critical|core|advanced)$/;
+const UNIT_TITLE = /^(?:##\s+)?Unit\s+\d+:\s+(.+)\s+\(Topic:\s+(.+)\)$/;
+const LEVEL_LINE = /^Level:\s+(.+?)(?:\s+Vocab:)?$/;
+const ITEM_LINE = /^-?\s*(.+)\s+\|\s+(.+)\s+\|\s+(.+)$/;
+const GRAMMAR_LINE = /^-?\s*(.+)\s+\|\s+(.+)\s+\|\s+(.+)\s+\|\s+(critical|core|advanced)$/;
 
 function parseItems(lines: string[]): { items: CurriculumUnit["vocab"]; restIndex: number } {
   const items: CurriculumUnit["vocab"] = [];
   let i = 0;
   for (; i < lines.length; i += 1) {
     const line = lines[i].trim();
-    if (line === "" || line.endsWith(":") || line.startsWith("##")) {
+    if (line === "" || line.endsWith(":") || line.startsWith("##") || line.startsWith("Unit ")) {
       break;
     }
     const match = ITEM_LINE.exec(line);
@@ -28,7 +28,7 @@ function parseGrammar(lines: string[]): { items: GrammarItem[]; restIndex: numbe
   let i = 0;
   for (; i < lines.length; i += 1) {
     const line = lines[i].trim();
-    if (line === "" || line.endsWith(":") || line.startsWith("##")) {
+    if (line === "" || line.endsWith(":") || line.startsWith("##") || line.startsWith("Unit ")) {
       break;
     }
     const match = GRAMMAR_LINE.exec(line);
@@ -69,7 +69,7 @@ export function loadCurriculumFromFile(filePath: string): Curriculum {
 
       const unit: CurriculumUnit = { title, topic, level, vocab: [], phrases: [], templates: [], grammar: [] };
 
-      while (i < lines.length && !lines[i].trim().startsWith("## Unit")) {
+      while (i < lines.length && !lines[i].trim().startsWith("## Unit") && !lines[i].trim().startsWith("Unit ")) {
         const section = lines[i].trim();
         if (section === "Vocab:") {
           const parsed = parseItems(lines.slice(i + 1));

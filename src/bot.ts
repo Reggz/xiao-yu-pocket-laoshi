@@ -228,13 +228,33 @@ function findExampleForUnit(unit: CurriculumUnit): CurriculumItem | null {
   return null;
 }
 
+function extractGrammarAnchors(hanzi: string): string[] {
+  const anchors = hanzi.match(/[\u4e00-\u9fff]+/g) ?? [];
+  const unique = Array.from(new Set(anchors));
+  return unique.filter((token) => token.length >= 1);
+}
+
+function findExampleForGrammar(unit: CurriculumUnit, grammarHanzi: string): CurriculumItem | null {
+  const anchors = extractGrammarAnchors(grammarHanzi);
+  if (!anchors.length) return findExampleForUnit(unit);
+
+  for (const anchor of anchors) {
+    const template = unit.templates.find((t) => t.hanzi.includes(anchor));
+    if (template) return template;
+    const phrase = unit.phrases.find((p) => p.hanzi.includes(anchor));
+    if (phrase) return phrase;
+  }
+
+  return findExampleForUnit(unit);
+}
+
 function buildDrillExplanation(drill: { type: string; target?: string }): string {
   if (!drill.target) return "";
   if (drill.type === "grammar") {
     const found = findGrammarTarget(drill.target);
     if (!found) return "";
     const header = `${found.item.hanzi}\n${toToneMarks(found.item.pinyin)}\n${found.item.english}`;
-    const example = findExampleForUnit(found.unit);
+    const example = findExampleForGrammar(found.unit, found.item.hanzi);
     if (!example) return header;
     return `${header}\n\nExample:\n${example.hanzi}\n${toToneMarks(example.pinyin)}\n${example.english}`;
   }

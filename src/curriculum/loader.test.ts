@@ -13,4 +13,10 @@ describe("curriculum loader", () => {
     expect(first.grammar.length).toBeGreaterThan(0);
     expect(first.grammar[0].tier).toBeTruthy();
   });
+
+  it("parses extended units through unit 30", () => {
+    const curriculum = loadCurriculumFromFile("docs/curriculum_seed.md");
+    expect(curriculum.units.length).toBe(30);
+    expect(curriculum.units[29]?.title).toBe("Culture and Arts");
+  });
 });

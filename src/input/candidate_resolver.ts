@@ -1,5 +1,6 @@
 import { loadCurriculumFromFile } from "../curriculum/loader";
 import { Curriculum } from "../curriculum/types";
+import { normalizeInput } from "./normalize";
 
 export type CandidateIndex = {
   toneMap: Map<string, string[]>;
@@ -18,6 +19,10 @@ function stripToneNumbers(pinyin: string): string {
   return pinyin.replace(/[1-5]/g, "");
 }
 
+function canonicalizePinyin(pinyin: string): string {
+  return normalizeInput(pinyin).canonicalPinyin.toLowerCase().trim();
+}
+
 export function buildCandidateIndex(curriculum: Curriculum): CandidateIndex {
   const toneMap = new Map<string, string[]>();
   const plainMap = new Map<string, string[]>();
@@ -25,7 +30,8 @@ export function buildCandidateIndex(curriculum: Curriculum): CandidateIndex {
   for (const unit of curriculum.units) {
     const items = [...unit.vocab, ...unit.phrases, ...unit.templates];
     for (const item of items) {
-      const toneKey = item.pinyin.toLowerCase().trim();
+      const toneKey = canonicalizePinyin(item.pinyin);
+      if (!toneKey) continue;
       const plainKey = stripToneNumbers(toneKey);
       push(toneMap, toneKey, item.hanzi);
       push(plainMap, plainKey, item.hanzi);
@@ -39,7 +45,7 @@ export function resolveCandidatesFromPinyin(
   canonicalPinyin: string,
   index: CandidateIndex
 ): string[] {
-  const toneKey = canonicalPinyin.toLowerCase().trim();
+  const toneKey = canonicalizePinyin(canonicalPinyin);
   if (!toneKey) return [];
 
   const toneMatches = index.toneMap.get(toneKey);

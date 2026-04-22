@@ -44,12 +44,18 @@ function stripToneNumbers(pinyin: string): string {
   return pinyin.replace(/[1-5]/g, "");
 }
 
+function canonicalizePinyin(pinyin: string): string {
+  return normalizeInput(pinyin).canonicalPinyin.toLowerCase().trim();
+}
+
 function buildPinyinVocabulary(curriculum: Curriculum): string[] {
   const vocab: string[] = [];
   for (const unit of curriculum.units) {
     const items = [...unit.vocab, ...unit.phrases, ...unit.templates];
     for (const item of items) {
-      vocab.push(stripToneNumbers(item.pinyin.toLowerCase().trim()));
+      const canonical = canonicalizePinyin(item.pinyin);
+      if (!canonical) continue;
+      vocab.push(stripToneNumbers(canonical));
     }
   }
   return Array.from(new Set(vocab)).filter(Boolean);

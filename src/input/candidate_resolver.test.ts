@@ -9,6 +9,11 @@ describe("candidate resolver", () => {
     expect(candidates).toContain("你好");
   });
 
+  it("resolves candidates for tone-mark pinyin", () => {
+    const candidates = resolveCandidatesFromPinyin("nǐ hǎo", index);
+    expect(candidates).toContain("你好");
+  });
+
   it("resolves candidates for plain pinyin", () => {
     const candidates = resolveCandidatesFromPinyin("ni hao", index);
     expect(candidates).toContain("你好");
