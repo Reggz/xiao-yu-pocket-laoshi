@@ -1,13 +1,18 @@
 import { Curriculum, CurriculumItem, GrammarItem } from "../curriculum/types";
-import { extractToneNumber, toToneMarks } from "../response/pinyin";
+
+export type DrillType = "vocab" | "grammar" | "complete_sentence" | "reply_sentence";
 
 export type DrillQuestion = {
   id: string;
   prompt: string;
   options: string[];
   answer: string;
-  type: "vocab" | "grammar" | "tone";
+  type: DrillType;
   target?: string;
+};
+
+export type DrillBuildOptions = {
+  topic?: string;
 };
 
 function pickRandom<T>(items: T[]): T | null {
@@ -16,89 +21,162 @@ function pickRandom<T>(items: T[]): T | null {
   return items[idx];
 }
 
-function collectVocab(curriculum: Curriculum): CurriculumItem[] {
+function getUnits(curriculum: Curriculum, options?: DrillBuildOptions) {
+  const topic = options?.topic?.trim();
+  if (!topic) return curriculum.units;
+  return curriculum.units.filter((u) => u.topic.toLowerCase() === topic.toLowerCase());
+}
+
+function collectVocab(curriculum: Curriculum, options?: DrillBuildOptions): CurriculumItem[] {
   const items: CurriculumItem[] = [];
-  for (const unit of curriculum.units) {
+  for (const unit of getUnits(curriculum, options)) {
     items.push(...unit.vocab);
   }
   return items;
 }
 
-function collectGrammar(curriculum: Curriculum): GrammarItem[] {
+function collectGrammar(curriculum: Curriculum, options?: DrillBuildOptions): GrammarItem[] {
   const items: GrammarItem[] = [];
-  for (const unit of curriculum.units) {
+  for (const unit of getUnits(curriculum, options)) {
     items.push(...unit.grammar);
   }
   return items;
 }
 
-export function buildMicroDrill(curriculum: Curriculum): DrillQuestion | null {
-  const items = collectVocab(curriculum);
+function collectSentences(curriculum: Curriculum, options?: DrillBuildOptions): CurriculumItem[] {
+  const items: CurriculumItem[] = [];
+  for (const unit of getUnits(curriculum, options)) {
+    items.push(...unit.phrases, ...unit.templates);
+  }
+  return items;
+}
+
+type ReplyPair = {
+  prompt: CurriculumItem;
+  reply: CurriculumItem;
+};
+
+function collectReplyPairs(curriculum: Curriculum, options?: DrillBuildOptions): ReplyPair[] {
+  const pairs: ReplyPair[] = [];
+  for (const unit of getUnits(curriculum, options)) {
+    const src = unit.templates.length >= 2 ? unit.templates : unit.phrases;
+    if (src.length < 2) continue;
+    for (let i = 0; i < src.length - 1; i += 1) {
+      pairs.push({ prompt: src[i], reply: src[i + 1] });
+    }
+  }
+  return pairs;
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+export function buildMicroDrill(curriculum: Curriculum, options?: DrillBuildOptions): DrillQuestion | null {
+  const items = collectVocab(curriculum, options);
   if (items.length < 4) return null;
 
   const target = pickRandom(items);
   if (!target) return null;
 
   const distractors = items.filter((i) => i.english !== target.english);
-  const options = new Set<string>();
-  options.add(target.english);
-  while (options.size < 4) {
+  const optionsSet = new Set<string>();
+  optionsSet.add(target.english);
+  while (optionsSet.size < 4) {
     const d = pickRandom(distractors);
     if (!d) break;
-    options.add(d.english);
+    optionsSet.add(d.english);
   }
 
   return {
     id: `micro_${Date.now()}`,
     prompt: `What does “${target.hanzi}” mean?`,
-    options: Array.from(options),
+    options: shuffle(Array.from(optionsSet)),
     answer: target.english,
     type: "vocab",
     target: target.hanzi
   };
 }
 
-export function buildGrammarDrill(curriculum: Curriculum): DrillQuestion | null {
-  const items = collectGrammar(curriculum);
+export function buildGrammarDrill(curriculum: Curriculum, options?: DrillBuildOptions): DrillQuestion | null {
+  const items = collectGrammar(curriculum, options);
   if (items.length < 4) return null;
 
   const target = pickRandom(items);
   if (!target) return null;
 
-  const distractors = items.filter((i) => i.english !== target.english);
-  const options = new Set<string>();
-  options.add(target.hanzi);
-  while (options.size < 4) {
+  const distractors = items.filter((i) => i.hanzi !== target.hanzi);
+  const optionsSet = new Set<string>();
+  optionsSet.add(target.hanzi);
+  while (optionsSet.size < 4) {
     const d = pickRandom(distractors);
     if (!d) break;
-    options.add(d.hanzi);
+    optionsSet.add(d.hanzi);
   }
 
   return {
     id: `grammar_${Date.now()}`,
     prompt: `Which grammar matches “${target.english}”?`,
-    options: Array.from(options),
+    options: shuffle(Array.from(optionsSet)),
     answer: target.hanzi,
     type: "grammar",
     target: target.hanzi
   };
 }
 
-export function buildToneDrill(curriculum: Curriculum): DrillQuestion | null {
-  const items = collectVocab(curriculum);
-  if (!items.length) return null;
+export function buildCompleteSentenceDrill(curriculum: Curriculum, options?: DrillBuildOptions): DrillQuestion | null {
+  const items = collectSentences(curriculum, options).filter((i) => i.english.length > 0);
+  if (items.length < 4) return null;
+
   const target = pickRandom(items);
   if (!target) return null;
 
-  const tone = extractToneNumber(target.pinyin);
-  if (!tone) return null;
+  const distractors = items.filter((i) => i.hanzi !== target.hanzi);
+  const optionsSet = new Set<string>();
+  optionsSet.add(target.hanzi);
+  while (optionsSet.size < 4) {
+    const d = pickRandom(distractors);
+    if (!d) break;
+    optionsSet.add(d.hanzi);
+  }
 
   return {
-    id: `tone_${Date.now()}`,
-    prompt: `What tone is used in “${toToneMarks(target.pinyin)}” for “${target.hanzi}”?`,
-    options: ["1", "2", "3", "4"],
-    answer: tone,
-    type: "tone",
+    id: `sentence_${Date.now()}`,
+    prompt: `Which sentence means: “${target.english}”?`,
+    options: shuffle(Array.from(optionsSet)),
+    answer: target.hanzi,
+    type: "complete_sentence",
     target: target.hanzi
+  };
+}
+
+export function buildReplySentenceDrill(curriculum: Curriculum, options?: DrillBuildOptions): DrillQuestion | null {
+  const pairs = collectReplyPairs(curriculum, options);
+  if (pairs.length < 4) return null;
+
+  const target = pickRandom(pairs);
+  if (!target) return null;
+
+  const distractors = pairs.filter((p) => p.reply.hanzi !== target.reply.hanzi);
+  const optionsSet = new Set<string>();
+  optionsSet.add(target.reply.hanzi);
+  while (optionsSet.size < 4) {
+    const d = pickRandom(distractors);
+    if (!d) break;
+    optionsSet.add(d.reply.hanzi);
+  }
+
+  return {
+    id: `reply_${Date.now()}`,
+    prompt: `Choose the best reply to:\n${target.prompt.hanzi}`,
+    options: shuffle(Array.from(optionsSet)),
+    answer: target.reply.hanzi,
+    type: "reply_sentence",
+    target: target.reply.hanzi
   };
 }

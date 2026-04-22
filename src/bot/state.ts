@@ -6,12 +6,15 @@ export type UserSettings = {
   topicBiasRatio: number;
 };
 
+export type DrillType = "vocab" | "grammar" | "complete_sentence" | "reply_sentence";
+export type DrillFocus = DrillType;
+
 export type DrillState = {
   id: string;
   prompt: string;
   options: string[];
   answer: string;
-  type: "vocab" | "grammar" | "tone";
+  type: DrillType;
   target?: string;
 };
 
@@ -20,6 +23,18 @@ export type DrillSessionState = {
   remaining: number;
   correct: number;
   items: string[];
+  topic: string;
+  focus: DrillFocus;
+  askedByType: Record<DrillType, number>;
+  wrongByType: Record<DrillType, number>;
+};
+
+export type DrillSetupStage = "topic" | "focus" | "count";
+
+export type DrillSetupState = {
+  stage: DrillSetupStage;
+  topic?: string;
+  focus?: DrillFocus;
 };
 
 export type PlacementState = {
@@ -42,6 +57,7 @@ export type UserSessionState = {
   lastMenuPromptAt?: number;
   pendingDrill?: DrillState;
   drillSession?: DrillSessionState;
+  drillSetup?: DrillSetupState;
   placement?: PlacementState;
   level: string;
   guidedStage?: number;
@@ -146,6 +162,7 @@ export function resetSession(userId: string): void {
   delete session.lastMenuPromptAt;
   delete session.pendingDrill;
   delete session.drillSession;
+  delete session.drillSetup;
   delete session.placement;
 }
 
@@ -194,6 +211,15 @@ export function setDrillSession(userId: string, drillSession: DrillSessionState 
 
 export function getDrillSession(userId: string): DrillSessionState | undefined {
   return getSession(userId).drillSession;
+}
+
+export function setDrillSetup(userId: string, drillSetup: DrillSetupState | undefined): void {
+  const session = getSession(userId);
+  session.drillSetup = drillSetup;
+}
+
+export function getDrillSetup(userId: string): DrillSetupState | undefined {
+  return getSession(userId).drillSetup;
 }
 
 export function setActiveMode(userId: string, mode: ActiveMode | undefined): void {

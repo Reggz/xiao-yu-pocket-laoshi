@@ -1,6 +1,7 @@
 import { Bot, InlineKeyboard } from "grammy";
 import { loadConfig } from "./config";
 import { loadCurriculumFromFile } from "./curriculum/loader";
+import { listAllTopics } from "./curriculum/helpers";
 import { CurriculumItem, CurriculumUnit, GrammarItem } from "./curriculum/types";
 import { startDisambiguation, isDisambiguationExpired, resolveDisambiguation } from "./input/disambiguation";
 import { runInputPipeline } from "./input/pipeline";
@@ -10,6 +11,7 @@ import {
   clearDisambiguation,
   getActiveMode,
   getDrillSession,
+  getDrillSetup,
   getLevel,
   getSession,
   getTopicBiasRatio,
@@ -22,6 +24,7 @@ import {
   setActiveMode,
   setDisambiguation,
   setDrillSession,
+  setDrillSetup,
   setLevel,
   setOnboardingComplete,
   setPaused,
@@ -35,7 +38,6 @@ import {
   updatePlacement
 } from "./bot/state";
 import { checkSafety, safetyResponse } from "./safety/filter";
-import { menuOptions } from "./bot/menu";
 import { validateTopicSelection } from "./onboarding/topics";
 import { logInteractionSafe } from "./storage/logging";
 import { createLlmAdapter } from "./llm/factory";
@@ -43,7 +45,12 @@ import { generateResponse } from "./response/engine";
 import { toToneMarks } from "./response/pinyin";
 import { selectAllowedGrammar } from "./response/grammar";
 import { initBudget } from "./llm/manager";
-import { buildGrammarDrill, buildMicroDrill, buildToneDrill } from "./drills/quick";
+import {
+  buildCompleteSentenceDrill,
+  buildGrammarDrill,
+  buildMicroDrill,
+  buildReplySentenceDrill
+} from "./drills/quick";
 import { placementQuestions, evaluatePlacementAnswer, scorePlacement } from "./onboarding/placement";
 
 const config = loadConfig();
@@ -67,9 +74,21 @@ const HELP_PATTERNS = [
 const EXPLAIN_PATTERNS = [/can\s+you\s+explain/i, /please\s+explain/i, /explain\s+that/i];
 
 const MICRO_DRILL_ALIASES = new Set(["micro-drills", "micro drills", "microdrills"]);
-const TONE_DRILL_ALIASES = new Set(["tone practice", "tone", "tone-drills", "tone drills"]);
 const PLACEMENT_ALIASES = new Set(["placement", "placement test", "start placement"]);
 const SKIP_ALIASES = new Set(["skip", "skip placement"]);
+
+type DrillFocus = "vocab" | "grammar" | "complete_sentence" | "reply_sentence";
+type DrillType = DrillFocus;
+
+const DRILL_ANY_TOPIC = "Any Topic";
+const DRILL_TOPICS = [DRILL_ANY_TOPIC, ...listAllTopics(curriculum)];
+const DRILL_FOCUS_OPTIONS: Array<{ id: DrillFocus; label: string }> = [
+  { id: "grammar", label: "Grammar" },
+  { id: "vocab", label: "Vocab Development" },
+  { id: "complete_sentence", label: "Complete Sentence Practice" },
+  { id: "reply_sentence", label: "Reply Sentence Practice" }
+];
+const DRILL_COUNT_OPTIONS = [5, 10, 20];
 
 export const bot = new Bot(config.telegramBotToken);
 
@@ -90,7 +109,31 @@ function buildDisambKeyboard(candidates: string[]): InlineKeyboard {
 
 function buildDrillKeyboard(options: string[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  options.forEach((o) => keyboard.text(o, `drill:${o}`).row());
+  options.forEach((option, idx) => keyboard.text(option, "drill:" + idx).row());
+  return keyboard;
+}
+
+function buildDrillTopicKeyboard(): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  DRILL_TOPICS.forEach((topic, idx) => {
+    keyboard.text(topic, "drillsetup:topic:" + idx).row();
+  });
+  return keyboard;
+}
+
+function buildDrillFocusKeyboard(): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  DRILL_FOCUS_OPTIONS.forEach((focus) => {
+    keyboard.text(focus.label, "drillsetup:focus:" + focus.id).row();
+  });
+  return keyboard;
+}
+
+function buildDrillCountKeyboard(): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  DRILL_COUNT_OPTIONS.forEach((count) => {
+    keyboard.text(String(count), "drillsetup:count:" + count).row();
+  });
   return keyboard;
 }
 
@@ -139,8 +182,62 @@ function buildSettingsMessage(): string {
   );
 }
 
-function initDrillSession(total = 5) {
-  return { total, remaining: total, correct: 0, items: [] as string[] };
+function initDrillSession(total: number, focus: DrillFocus, topic: string) {
+  return {
+    total,
+    remaining: total,
+    correct: 0,
+    items: [] as string[],
+    topic,
+    focus,
+    askedByType: {
+      vocab: 0,
+      grammar: 0,
+      complete_sentence: 0,
+      reply_sentence: 0
+    },
+    wrongByType: {
+      vocab: 0,
+      grammar: 0,
+      complete_sentence: 0,
+      reply_sentence: 0
+    }
+  };
+}
+
+function getFocusLabel(focus: DrillFocus): string {
+  const found = DRILL_FOCUS_OPTIONS.find((f) => f.id === focus);
+  return found ? found.label : focus;
+}
+
+async function sendDrillSetupTopic(ctx: any, userId: string): Promise<void> {
+  setActiveMode(userId, "drill");
+  setPendingDrill(userId, undefined);
+  setDrillSession(userId, undefined);
+  setDrillSetup(userId, { stage: "topic" });
+  await ctx.reply("Drill setup (1/3): Choose a topic.", { reply_markup: buildDrillTopicKeyboard() });
+}
+
+async function sendDrillSetupFocus(ctx: any, userId: string, topic: string): Promise<void> {
+  setDrillSetup(userId, { stage: "focus", topic });
+  await ctx.reply(`Drill setup (2/3): Topic = ${topic}. Choose your focus area.`, {
+    reply_markup: buildDrillFocusKeyboard()
+  });
+}
+
+async function sendDrillSetupCount(ctx: any, userId: string, topic: string, focus: DrillFocus): Promise<void> {
+  setDrillSetup(userId, { stage: "count", topic, focus });
+  await ctx.reply(`Drill setup (3/3): Focus = ${getFocusLabel(focus)}. How many questions?`, {
+    reply_markup: buildDrillCountKeyboard()
+  });
+}
+
+function pickDrillByFocus(focus: DrillFocus, topic: string) {
+  const scopedTopic = topic === DRILL_ANY_TOPIC ? undefined : topic;
+  if (focus === "vocab") return buildMicroDrill(curriculum, { topic: scopedTopic });
+  if (focus === "grammar") return buildGrammarDrill(curriculum, { topic: scopedTopic });
+  if (focus === "complete_sentence") return buildCompleteSentenceDrill(curriculum, { topic: scopedTopic });
+  return buildReplySentenceDrill(curriculum, { topic: scopedTopic });
 }
 
 async function sendNextDrill(ctx: any, userId: string): Promise<void> {
@@ -148,22 +245,21 @@ async function sendNextDrill(ctx: any, userId: string): Promise<void> {
   const drillSession = session.drillSession;
   if (!drillSession || drillSession.remaining <= 0) return;
 
-  const roll = Math.random();
-  let question = null;
-  if (roll < 0.7) {
-    question = buildMicroDrill(curriculum);
-  } else if (roll < 0.9) {
-    question = buildGrammarDrill(curriculum);
-  } else {
-    question = buildToneDrill(curriculum);
+  let question = pickDrillByFocus(drillSession.focus, drillSession.topic);
+  if (!question) {
+    const scopedTopic = drillSession.topic === DRILL_ANY_TOPIC ? undefined : drillSession.topic;
+    question =
+      buildMicroDrill(curriculum, { topic: scopedTopic }) ||
+      buildGrammarDrill(curriculum, { topic: scopedTopic }) ||
+      buildCompleteSentenceDrill(curriculum, { topic: scopedTopic }) ||
+      buildReplySentenceDrill(curriculum, { topic: scopedTopic });
   }
 
   if (!question) {
-    question = buildMicroDrill(curriculum) || buildGrammarDrill(curriculum) || buildToneDrill(curriculum);
-  }
-  if (!question) {
-    await ctx.reply("No drills available yet.");
+    await ctx.reply("No drills available yet for this selection.");
     setDrillSession(userId, undefined);
+    setDrillSetup(userId, undefined);
+    await sendReturnMenu(ctx, userId);
     return;
   }
 
@@ -171,20 +267,57 @@ async function sendNextDrill(ctx: any, userId: string): Promise<void> {
   await ctx.reply(question.prompt, { reply_markup: buildDrillKeyboard(question.options) });
 }
 
-async function startDrillSession(ctx: any, userId: string): Promise<void> {
+async function startDrillSession(
+  ctx: any,
+  userId: string,
+  config: { topic: string; focus: DrillFocus; total: number }
+): Promise<void> {
   setActiveMode(userId, "drill");
-  setDrillSession(userId, initDrillSession(5));
+  setDrillSetup(userId, undefined);
+  setDrillSession(userId, initDrillSession(config.total, config.focus, config.topic));
+  await ctx.reply(`Starting drill: ${getFocusLabel(config.focus)} · ${config.topic} · ${config.total} questions.`);
   await sendNextDrill(ctx, userId);
 }
 
 function buildDrillSummary(userId: string): string {
   const session = getDrillSession(userId);
   if (!session) return "Session complete.";
-  const items = session.items.slice(0, 4);
-  const itemsLine = items.length ? `Reviewed: ${items.join(" · ")}` : "Reviewed: (none)";
+
+  const accuracy = session.total > 0 ? Math.round((session.correct / session.total) * 100) : 0;
+  const items = session.items.slice(0, 6);
+  const reviewedLine = items.length ? `Reviewed: ${items.join(" · ")}` : "Reviewed: (none)";
+
+  const typeLabels: Record<DrillType, string> = {
+    vocab: "Vocab",
+    grammar: "Grammar",
+    complete_sentence: "Complete Sentence",
+    reply_sentence: "Reply Sentence"
+  };
+
+  const stats: string[] = [];
+  let weakest: { type: DrillType; accuracy: number } | null = null;
+  for (const type of Object.keys(session.askedByType) as DrillType[]) {
+    const asked = session.askedByType[type];
+    if (!asked) continue;
+    const wrong = session.wrongByType[type];
+    const correct = asked - wrong;
+    const acc = Math.round((correct / asked) * 100);
+    stats.push(typeLabels[type] + ": " + correct + "/" + asked + " (" + acc + "%)");
+    if (!weakest || acc < weakest.accuracy) weakest = { type, accuracy: acc };
+  }
+
+  let lacking = "Good consistency across this drill set.";
+  if (weakest !== null && weakest.accuracy < 80) {
+    const weakestType = weakest.type;
+    lacking = "Area to improve: " + typeLabels[weakestType] + " (" + weakest.accuracy + "%).";
+  }
+
+  const statsLine = stats.length ? `Breakdown: ${stats.join(" | ")}` : "Breakdown: (no stats)";
   return (
-    `Session complete. Score: ${session.correct}/${session.total}.\n` +
-    `${itemsLine}`
+    `Session complete. Score: ${session.correct}/${session.total} (${accuracy}%).\n` +
+    `${reviewedLine}\n` +
+    `${statsLine}\n` +
+    `${lacking}`
   );
 }
 
@@ -192,6 +325,7 @@ async function finishDrillSession(ctx: any, userId: string): Promise<void> {
   const summary = buildDrillSummary(userId);
   await ctx.reply(summary);
   setDrillSession(userId, undefined);
+  setDrillSetup(userId, undefined);
   await sendReturnMenu(ctx, userId);
 }
 
@@ -199,6 +333,18 @@ function findVocabTarget(hanzi: string): { unit: CurriculumUnit; item: Curriculu
   for (const unit of curriculum.units) {
     const item = unit.vocab.find((v) => v.hanzi === hanzi);
     if (item) return { unit, item };
+  }
+  return null;
+}
+
+function findItemTarget(hanzi: string): { unit: CurriculumUnit; item: CurriculumItem } | null {
+  for (const unit of curriculum.units) {
+    const phrase = unit.phrases.find((p) => p.hanzi === hanzi);
+    if (phrase) return { unit, item: phrase };
+    const template = unit.templates.find((t) => t.hanzi === hanzi);
+    if (template) return { unit, item: template };
+    const vocab = unit.vocab.find((v) => v.hanzi === hanzi);
+    if (vocab) return { unit, item: vocab };
   }
   return null;
 }
@@ -259,7 +405,7 @@ function buildDrillExplanation(drill: { type: string; target?: string }): string
     return `${header}\n\nExample:\n${example.hanzi}\n${toToneMarks(example.pinyin)}\n${example.english}`;
   }
 
-  const found = findVocabTarget(drill.target);
+  const found = findItemTarget(drill.target);
   if (!found) return "";
   const header = `${found.item.hanzi}\n${toToneMarks(found.item.pinyin)}\n${found.item.english}`;
   const example = findExampleForHanzi(found.item.hanzi) ?? findExampleForUnit(found.unit);
@@ -320,26 +466,6 @@ function currentPlacementPrompt(index: number): string | null {
   return q.prompt;
 }
 
-async function sendMicroDrill(ctx: any, userId: string): Promise<void> {
-  const q = buildMicroDrill(curriculum);
-  if (!q) {
-    await ctx.reply("No drills available yet.");
-    return;
-  }
-  setPendingDrill(userId, q);
-  await ctx.reply(q.prompt, { reply_markup: buildDrillKeyboard(q.options) });
-}
-
-async function sendToneDrill(ctx: any, userId: string): Promise<void> {
-  const q = buildToneDrill(curriculum);
-  if (!q) {
-    await ctx.reply("No tone drills available yet.");
-    return;
-  }
-  setPendingDrill(userId, q);
-  await ctx.reply(q.prompt, { reply_markup: buildDrillKeyboard(q.options) });
-}
-
 bot.command("start", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
@@ -354,12 +480,6 @@ bot.command("done", async (ctx) => {
   if (!from) return;
   setOnboardingComplete(from.id.toString(), true);
   stopPlacement(from.id.toString());
-  await ctx.reply("Onboarding complete. Send a message to begin.");
-bot.command("done", async (ctx) => {
-  const from = ctx.from;
-  if (!from) return;
-  setOnboardingComplete(from.id.toString(), true);
-  stopPlacement(from.id.toString());
   await sendReturnMenu(ctx, from.id.toString());
 });
 
@@ -369,10 +489,6 @@ bot.command("skip", async (ctx) => {
   setOnboardingComplete(from.id.toString(), true);
   stopPlacement(from.id.toString());
   await sendReturnMenu(ctx, from.id.toString());
-});
-  if (prompt) {
-    await ctx.reply(`Placement Q1: ${prompt}`);
-  }
 });
 
 bot.command("pause", async (ctx) => {
@@ -400,14 +516,11 @@ bot.command("drill", async (ctx) => {
   const from = ctx.from;
   if (!from) return;
   setOnboardingComplete(from.id.toString(), true);
-  await startDrillSession(ctx, from.id.toString());
+  await sendDrillSetupTopic(ctx, from.id.toString());
 });
 
 bot.command("tone", async (ctx) => {
-  const from = ctx.from;
-  if (!from) return;
-  setOnboardingComplete(from.id.toString(), true);
-  await sendToneDrill(ctx, from.id.toString());
+  await ctx.reply("Tone practice is now merged into Drill mode. Use /drill.");
 });
 
 bot.command("ping", (ctx) => ctx.reply("pong"));
@@ -492,7 +605,7 @@ bot.on("callback_query:data", async (ctx) => {
     }
     if (data === "menu:drill") {
       setOnboardingComplete(userId, true);
-      await startDrillSession(ctx, userId);
+      await sendDrillSetupTopic(ctx, userId);
       return;
     }
     if (data === "menu:free_chat") {
@@ -508,6 +621,46 @@ bot.on("callback_query:data", async (ctx) => {
     }
   }
 
+  if (data.startsWith("drillsetup:")) {
+    const userId = ctx.from?.id?.toString();
+    if (!userId) return;
+    await ctx.answerCallbackQuery();
+
+    if (data.startsWith("drillsetup:topic:")) {
+      const idx = parseInt(data.slice("drillsetup:topic:".length), 10);
+      const topic = DRILL_TOPICS[idx] ?? DRILL_ANY_TOPIC;
+      await sendDrillSetupFocus(ctx, userId, topic);
+      return;
+    }
+
+    if (data.startsWith("drillsetup:focus:")) {
+      const focusId = data.slice("drillsetup:focus:".length) as DrillFocus;
+      if (!DRILL_FOCUS_OPTIONS.some((f) => f.id === focusId)) {
+        await ctx.reply("Invalid focus selection. Please restart with /drill.");
+        return;
+      }
+      const setup = getDrillSetup(userId);
+      const topic = setup?.topic ?? DRILL_ANY_TOPIC;
+      await sendDrillSetupCount(ctx, userId, topic, focusId);
+      return;
+    }
+
+    if (data.startsWith("drillsetup:count:")) {
+      const count = parseInt(data.slice("drillsetup:count:".length), 10);
+      if (!DRILL_COUNT_OPTIONS.includes(count)) {
+        await ctx.reply("Invalid question count. Please restart with /drill.");
+        return;
+      }
+
+      const setup = getDrillSetup(userId);
+      const topic = setup?.topic ?? DRILL_ANY_TOPIC;
+      const focus = setup?.focus ?? "vocab";
+      setOnboardingComplete(userId, true);
+      await startDrillSession(ctx, userId, { topic, focus, total: count });
+      return;
+    }
+  }
+
   if (data.startsWith("drill:")) {
     const userId = ctx.from?.id?.toString();
     if (!userId) return;
@@ -516,7 +669,9 @@ bot.on("callback_query:data", async (ctx) => {
       await ctx.answerCallbackQuery({ text: "No active drill." });
       return;
     }
-    const answer = data.slice("drill:".length);
+    const answerKey = data.slice("drill:".length);
+    const parsedIndex = parseInt(answerKey, 10);
+    const answer = Number.isNaN(parsedIndex) ? answerKey : (drill.options[parsedIndex] ?? "");
     const correct = answer === drill.answer;
     setPendingDrill(userId, undefined);
     await ctx.answerCallbackQuery();
@@ -526,7 +681,12 @@ bot.on("callback_query:data", async (ctx) => {
     const drillSession = getDrillSession(userId);
     if (drillSession) {
       drillSession.remaining -= 1;
-      if (correct) drillSession.correct += 1;
+      drillSession.askedByType[drill.type] += 1;
+      if (correct) {
+        drillSession.correct += 1;
+      } else {
+        drillSession.wrongByType[drill.type] += 1;
+      }
       if (drill.target) drillSession.items.push(drill.target);
       if (drillSession.remaining <= 0) {
         await finishDrillSession(ctx, userId);
@@ -597,16 +757,9 @@ bot.on("message:text", async (ctx) => {
 
   if (MICRO_DRILL_ALIASES.has(lower)) {
     setOnboardingComplete(userId, true);
-    await startDrillSession(ctx, userId);
+    await sendDrillSetupTopic(ctx, userId);
     return;
   }
-
-  if (TONE_DRILL_ALIASES.has(lower)) {
-    setOnboardingComplete(userId, true);
-    await sendToneDrill(ctx, userId);
-    return;
-  }
-
   const placement = getPlacement(userId);
   if (placement?.active) {
     if (SKIP_ALIASES.has(lower)) {
