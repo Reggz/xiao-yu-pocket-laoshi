@@ -16,6 +16,11 @@ export type DrillState = {
   answer: string;
   type: DrillType;
   target?: string;
+  key?: string;
+  context?: {
+    promptMeaning?: string;
+    promptHanzi?: string;
+  };
 };
 
 export type DrillSessionState = {
@@ -27,6 +32,8 @@ export type DrillSessionState = {
   focus: DrillFocus;
   askedByType: Record<DrillType, number>;
   wrongByType: Record<DrillType, number>;
+  askedKeys: string[];
+  lastAskedKey?: string;
 };
 
 export type DrillSetupStage = "topic" | "focus" | "count";
