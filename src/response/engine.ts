@@ -7,6 +7,11 @@ import { Budget } from "../llm/throttle";
 import { shouldUseLlm, consumeLlm, LlmPolicy } from "../llm/manager";
 import { formatPinyinLine, toToneMarks } from "./pinyin";
 
+export type ResponseCache = {
+  get: (key: string) => Promise<string | null>;
+  set: (key: string, value: string) => Promise<void>;
+};
+
 export type ResponseContext = {
   curriculum: Curriculum;
   allowedLevels: string[];
@@ -16,12 +21,14 @@ export type ResponseContext = {
   conversation: InteractionSnippet[];
   budget: Budget;
   llmPolicy: LlmPolicy;
+  cache?: ResponseCache;
 };
 
 export type ResponseResult = {
   text: string;
   usedLlm: boolean;
   budget: Budget;
+  fromCache?: boolean;
 };
 
 const BOT_NAME = "Xiao Yu";
@@ -36,6 +43,12 @@ function formatLlmOutput(text: string): string {
     return lines.slice(0, 3).join("\n");
   }
   return formatPinyinLine(text.trim());
+}
+
+function buildCacheKey(userText: string, context: ResponseContext): string {
+  const level = context.allowedLevels.join(",") || "A0";
+  const topics = context.topics.join(",") || "any";
+  return `free_chat|${level}|${topics}|${userText.trim().toLowerCase()}`;
 }
 
 export async function generateResponse(
@@ -62,6 +75,18 @@ export async function generateResponse(
     return { text: fallback, usedLlm: false, budget: context.budget };
   }
 
+  const cacheKey = buildCacheKey(userText, context);
+  if (context.cache) {
+    try {
+      const cached = await context.cache.get(cacheKey);
+      if (cached) {
+        return { text: cached, usedLlm: false, fromCache: true, budget: context.budget };
+      }
+    } catch {
+      // soft-fail cache
+    }
+  }
+
   const buffer = buildConversationBuffer(context.conversation, 5, 120);
   const history = buffer
     .map((t) => `User: ${t.input}\nBot: ${t.output}`)
@@ -79,9 +104,17 @@ export async function generateResponse(
       allowedGrammar: context.grammar,
       allowOneNonCritical: true
     });
+    const formatted = formatLlmOutput(text);
+    if (context.cache) {
+      try {
+        await context.cache.set(cacheKey, formatted);
+      } catch {
+        // soft-fail cache
+      }
+    }
     const newBudget = consumeLlm(context.llmPolicy, context.budget);
-    return { text: formatLlmOutput(text), usedLlm: true, budget: newBudget };
-  } catch (err) {
+    return { text: formatted, usedLlm: true, budget: newBudget };
+  } catch {
     return { text: fallback, usedLlm: false, budget: context.budget };
   }
 }

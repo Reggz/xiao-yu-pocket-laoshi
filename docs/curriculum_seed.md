@@ -1,7 +1,7 @@
 # Curriculum Seed (A0-B1+)
 
 ## Format Guidelines
-- Each unit includes: title, topic tag, level, vocab list, phrases, templates, grammar.
+- Each unit includes: title, topic tag, level, vocab list, phrases, templates, grammar, optional ReplyPairs for deterministic reply drills.
 - Use simplified characters, pinyin with tone marks, and English gloss.
 - Runtime accepts pinyin with tone marks, tone numbers, or plain pinyin.
 - Topic tags are coarse (Self-Intro, Food/Drink, Daily Routine, Numbers/Quantity, Location, Work, Small Talk, Logic, Health/Body).
@@ -27,6 +27,9 @@ Templates:
 - 你好！你好吗？ | nǐ hǎo nǐ hǎo ma | hello how are you
 - 谢谢。你呢？ | xiè xie nǐ ne | thanks and you
 
+ReplyPairs:
+- 你好！你好吗？ => 谢谢。你呢？ | polite follow-up after greeting
+
 Grammar:
 - 吗问句 | ma | add 吗 to form a yes/no question | critical
 - A不A问句 | a bu a | ask with A-not-A pattern | core
@@ -48,6 +51,10 @@ Phrases:
 Templates:
 - 你好，我叫... | nǐ hǎo wǒ jiào | hello my name is
 - 你呢？ | nǐ ne | and you
+
+ReplyPairs:
+- 你叫什么名字？ => 你好，我叫... | answer by introducing your name
+- 你好，我叫... => 你呢？ | ask back after introducing yourself
 
 Grammar:
 - SVO语序 | svo | basic subject verb object order | critical
@@ -72,6 +79,9 @@ Phrases:
 Templates:
 - 你今天吃什么？ | nǐ jīn tiān chī shén me | what do you eat today
 - 很好。你喝什么？ | hěn hǎo nǐ hē shén me | nice what do you drink
+
+ReplyPairs:
+- 你今天吃什么？ => 我吃... | direct answer to what you eat
 
 Grammar:
 - 动词加什么 | dòng cí jiā shén me | ask the object with 什么 | core
@@ -121,6 +131,9 @@ Templates:
 - 你有几个朋友？ | nǐ yǒu jǐ gè péng you | how many friends do you have
 - 我有三个... | wǒ yǒu sān gè | I have three
 
+ReplyPairs:
+- 你有几个朋友？ => 我有三个... | answer quantity question with number
+
 Grammar:
 - 数量个名词 | shù liàng gè míng cí | number plus measure word plus noun | core
 - 有加名词 | yǒu jiā míng cí | possession with 有 | core
@@ -142,6 +155,10 @@ Phrases:
 Templates:
 - 你要去哪里？ | nǐ yào qù nǎ lǐ | where do you want to go
 - 我去... | wǒ qù | I go to
+
+ReplyPairs:
+- 你在哪里？ => 我在这里。 | answer location question directly
+- 你要去哪里？ => 我去... | answer destination question directly
 
 Grammar:
 - 在加地点 | zài jiā dì diǎn | location marker pattern | core

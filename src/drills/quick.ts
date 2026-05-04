@@ -13,6 +13,8 @@ export type DrillQuestion = {
   context?: {
     promptMeaning?: string;
     promptHanzi?: string;
+    answerMeaning?: string;
+    rationale?: string;
   };
 };
 
@@ -60,15 +62,23 @@ function collectSentences(curriculum: Curriculum, options?: DrillBuildOptions): 
 type ReplyPair = {
   prompt: CurriculumItem;
   reply: CurriculumItem;
+  rationale?: string;
 };
 
 function collectReplyPairs(curriculum: Curriculum, options?: DrillBuildOptions): ReplyPair[] {
   const pairs: ReplyPair[] = [];
   for (const unit of getUnits(curriculum, options)) {
-    const src = unit.templates.length >= 2 ? unit.templates : unit.phrases;
-    if (src.length < 2) continue;
-    for (let i = 0; i < src.length - 1; i += 1) {
-      pairs.push({ prompt: src[i], reply: src[i + 1] });
+    if (!unit.replyPairs.length) continue;
+
+    const sentencePool = [...unit.templates, ...unit.phrases];
+    const byHanzi = new Map<string, CurriculumItem>();
+    sentencePool.forEach((item) => byHanzi.set(item.hanzi, item));
+
+    for (const pair of unit.replyPairs) {
+      const prompt = byHanzi.get(pair.promptHanzi);
+      const reply = byHanzi.get(pair.replyHanzi);
+      if (!prompt || !reply) continue;
+      pairs.push({ prompt, reply, rationale: pair.rationale });
     }
   }
   return pairs;
@@ -202,7 +212,9 @@ export function buildReplySentenceDrill(curriculum: Curriculum, options?: DrillB
     target: target.reply.hanzi,
     context: {
       promptHanzi: target.prompt.hanzi,
-      promptMeaning: target.prompt.english
+      promptMeaning: target.prompt.english,
+      answerMeaning: target.reply.english,
+      rationale: target.rationale
     }
   };
 }

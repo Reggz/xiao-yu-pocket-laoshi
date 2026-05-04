@@ -13,6 +13,12 @@ export type GrammarItem = {
   tier: GrammarTier;
 };
 
+export type ReplyPair = {
+  promptHanzi: string;
+  replyHanzi: string;
+  rationale?: string;
+};
+
 export type CurriculumUnit = {
   title: string;
   topic: string;
@@ -21,6 +27,7 @@ export type CurriculumUnit = {
   phrases: CurriculumItem[];
   templates: CurriculumItem[];
   grammar: GrammarItem[];
+  replyPairs: ReplyPair[];
 };
 
 export type Curriculum = {

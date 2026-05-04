@@ -40,6 +40,14 @@ import {
 import { checkSafety, safetyResponse } from "./safety/filter";
 import { validateTopicSelection } from "./onboarding/topics";
 import { logInteractionSafe } from "./storage/logging";
+import {
+  enqueueCurriculumReviewItem,
+  getCachedLlmContent,
+  listPendingCurriculumReview,
+  upsertCachedLlmContent,
+  updateCurriculumReviewStatus
+} from "./storage/db";
+import { buildReviewGenerationCacheKey, generateReplyPairSuggestion } from "./curriculum/review";
 import { createLlmAdapter } from "./llm/factory";
 import { generateResponse } from "./response/engine";
 import { toToneMarks } from "./response/pinyin";
@@ -437,7 +445,7 @@ function buildDrillExplanation(drill: {
   target?: string;
   prompt: string;
   answer: string;
-  context?: { promptMeaning?: string; promptHanzi?: string };
+  context?: { promptMeaning?: string; promptHanzi?: string; answerMeaning?: string; rationale?: string };
 }): string {
   if (!drill.target) return "";
 
@@ -466,12 +474,32 @@ function buildDrillExplanation(drill: {
     ? `Why this is correct: it means “${drill.context.promptMeaning}”.`
     : "Why this is correct: this option best matches the prompt.";
 
-  if (drill.type === "complete_sentence" || drill.type === "reply_sentence") {
+  if (drill.type === "complete_sentence") {
     const related = findRelatedExampleForItem(found.unit, found.item.hanzi);
     if (!related) {
       return `${header}\n\n${why}`;
     }
     return `${header}\n\n${why}\n\nRelated sentence:\n${related.hanzi}\n${toToneMarks(related.pinyin)}\n${related.english}`;
+  }
+
+  if (drill.type === "reply_sentence") {
+    const promptMeaning = drill.context?.promptMeaning ?? "";
+    const promptHanzi = drill.context?.promptHanzi ?? "";
+    const rationale = drill.context?.rationale ?? "";
+    const answerMeaning = drill.context?.answerMeaning ?? "";
+
+    const reason = rationale
+      ? `Why this is correct: ${rationale}`
+      : promptMeaning
+        ? `Why this is correct: it is a natural response to "${promptMeaning}".`
+        : "Why this is correct: it best matches the prompt intent.";
+
+    const parts = [header, reason];
+    if (answerMeaning) parts.push(`Answer meaning: ${answerMeaning}`);
+    if (promptHanzi || promptMeaning) {
+      parts.push(`Prompt:\n${promptHanzi}\n${promptMeaning}`);
+    }
+    return parts.filter(Boolean).join("\n\n");
   }
 
   const example = findExampleForHanzi(found.item.hanzi);
@@ -490,7 +518,7 @@ function buildDrillFeedback(
     target?: string;
     answer: string;
     prompt: string;
-    context?: { promptMeaning?: string; promptHanzi?: string };
+    context?: { promptMeaning?: string; promptHanzi?: string; answerMeaning?: string; rationale?: string };
   },
   correct: boolean
 ): string {
@@ -502,6 +530,29 @@ function buildDrillFeedback(
 
 function buildLlmPolicy() {
   return { maxCallsPerSession: 3, disableCaps: config.llmDisableCaps ?? false };
+}
+
+function buildResponseCache() {
+  return {
+    get: async (key: string) => getCachedLlmContent(config.databaseUrl, key, "free_chat"),
+    set: async (key: string, value: string) => upsertCachedLlmContent(config.databaseUrl, key, value, "free_chat")
+  };
+}
+
+function isAdmin(userId?: string): boolean {
+  if (!userId || !config.telegramAdminChatId) return false;
+  return userId === config.telegramAdminChatId;
+}
+
+function formatReviewItemRow(index: number, item: {
+  id: string;
+  promptHanzi: string;
+  replyHanzi: string;
+  topic: string | null;
+  level: string | null;
+  source: string;
+}): string {
+  return String(index + 1) + ". " + item.id + "\n   " + item.promptHanzi + " => " + item.replyHanzi + "\n   topic=" + (item.topic || "n/a") + " level=" + (item.level || "n/a") + " source=" + item.source;
 }
 
 function shouldDisambiguate(candidates: string[], pinyin: string): boolean {
@@ -642,6 +693,116 @@ bot.command("bias", async (ctx) => {
   }
   setTopicBiasRatio(from.id.toString(), value);
   await ctx.reply(`Topic bias ratio set to ${value}`);
+});
+
+
+bot.command("review_curriculum", async (ctx) => {
+  const userId = ctx.from?.id?.toString();
+  if (!isAdmin(userId)) {
+    await ctx.reply("Admin only command.");
+    return;
+  }
+
+  const pending = await listPendingCurriculumReview(config.databaseUrl, 10);
+  if (!pending.length) {
+    await ctx.reply("No pending review items.");
+    return;
+  }
+
+  const lines = pending.map((item, idx) => formatReviewItemRow(idx, item));
+  await ctx.reply("Pending curriculum review items:\n" + lines.join("\n\n"));
+});
+
+bot.command("review_approve", async (ctx) => {
+  const userId = ctx.from?.id?.toString();
+  const text = ctx.message?.text ?? "";
+  if (!isAdmin(userId)) {
+    await ctx.reply("Admin only command.");
+    return;
+  }
+
+  const id = text.replace("/review_approve", "").trim();
+  if (!id) {
+    await ctx.reply("Usage: /review_approve <id>");
+    return;
+  }
+
+  const ok = await updateCurriculumReviewStatus(config.databaseUrl, id, "approved", userId || "admin");
+  await ctx.reply(ok ? "Approved: " + id : "Could not approve: " + id);
+});
+
+bot.command("review_reject", async (ctx) => {
+  const userId = ctx.from?.id?.toString();
+  const text = ctx.message?.text ?? "";
+  if (!isAdmin(userId)) {
+    await ctx.reply("Admin only command.");
+    return;
+  }
+
+  const id = text.replace("/review_reject", "").trim();
+  if (!id) {
+    await ctx.reply("Usage: /review_reject <id>");
+    return;
+  }
+
+  const ok = await updateCurriculumReviewStatus(config.databaseUrl, id, "rejected", userId || "admin");
+  await ctx.reply(ok ? "Rejected: " + id : "Could not reject: " + id);
+});
+
+bot.command("review_generate", async (ctx) => {
+  const userId = ctx.from?.id?.toString();
+  if (!isAdmin(userId)) {
+    await ctx.reply("Admin only command.");
+    return;
+  }
+
+  if (!llmAdapter) {
+    await ctx.reply("LLM not configured. Cannot generate review suggestions.");
+    return;
+  }
+
+  const suggestion = await generateReplyPairSuggestion(llmAdapter, curriculum);
+  if (!suggestion) {
+    await ctx.reply("Could not generate a suggestion right now.");
+    return;
+  }
+
+  const cacheKey = buildReviewGenerationCacheKey({
+    promptHanzi: suggestion.promptHanzi,
+    topic: suggestion.topic,
+    level: suggestion.level
+  });
+
+  const cached = await getCachedLlmContent(config.databaseUrl, cacheKey, "review_generate");
+  if (cached) {
+    await ctx.reply("Suggestion already exists in cache for this prompt. Use /review_curriculum to review pending items.");
+    return;
+  }
+
+  const payload = JSON.stringify(suggestion);
+  await upsertCachedLlmContent(config.databaseUrl, cacheKey, payload, "review_generate", { source: "review_generate" });
+  const id = await enqueueCurriculumReviewItem(config.databaseUrl, {
+    source: "llm",
+    promptHanzi: suggestion.promptHanzi,
+    promptPinyin: suggestion.promptPinyin,
+    promptEnglish: suggestion.promptEnglish,
+    replyHanzi: suggestion.replyHanzi,
+    replyPinyin: suggestion.replyPinyin,
+    replyEnglish: suggestion.replyEnglish,
+    rationale: suggestion.rationale,
+    topic: suggestion.topic,
+    level: suggestion.level,
+    rawPayload: suggestion as unknown as Record<string, unknown>
+  });
+
+  await ctx.reply(
+    "Generated and queued for review:\n" +
+      "ID: " + (id || "(unknown)") +
+      "\n" + suggestion.promptHanzi + " => " + suggestion.replyHanzi +
+      "\n" + suggestion.replyPinyin +
+      "\n" + suggestion.replyEnglish +
+      "\nReason: " + suggestion.rationale
+  );
 });
 
 bot.on("callback_query:data", async (ctx) => {
@@ -807,7 +968,8 @@ bot.on("callback_query:data", async (ctx) => {
     grammar: selectAllowedGrammar([], ["critical", "core", "advanced"]),
     conversation: session.buffer,
     budget: initBudget(buildLlmPolicy()),
-    llmPolicy: buildLlmPolicy()
+    llmPolicy: buildLlmPolicy(),
+    cache: buildResponseCache()
   });
 
   await ctx.answerCallbackQuery();
@@ -978,7 +1140,8 @@ bot.on("message:text", async (ctx) => {
           grammar: selectAllowedGrammar([], ["critical", "core", "advanced"]),
           conversation: session.buffer,
           budget: initBudget(buildLlmPolicy()),
-          llmPolicy: buildLlmPolicy()
+          llmPolicy: buildLlmPolicy(),
+    cache: buildResponseCache()
         });
         const replyText = `已选择：${selection}\n${result.text}`;
         await ctx.reply(replyText);
@@ -1018,7 +1181,8 @@ bot.on("message:text", async (ctx) => {
     grammar: selectAllowedGrammar([], ["critical", "core", "advanced"]),
     conversation: session.buffer,
     budget: initBudget(buildLlmPolicy()),
-    llmPolicy: buildLlmPolicy()
+    llmPolicy: buildLlmPolicy(),
+    cache: buildResponseCache()
   });
 
   const hintMessages: string[] = [];

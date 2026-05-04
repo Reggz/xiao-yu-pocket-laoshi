@@ -1,11 +1,12 @@
 import fs from "fs";
 import path from "path";
-import { Curriculum, CurriculumUnit, GrammarItem, GrammarTier } from "./types";
+import { Curriculum, CurriculumUnit, GrammarItem, GrammarTier, ReplyPair } from "./types";
 
 const UNIT_TITLE = /^(?:##\s+)?Unit\s+\d+:\s+(.+)\s+\(Topic:\s+(.+)\)$/;
 const LEVEL_LINE = /^Level:\s+(.+?)(?:\s+Vocab:)?$/;
 const ITEM_LINE = /^-?\s*(.+)\s+\|\s+(.+)\s+\|\s+(.+)$/;
 const GRAMMAR_LINE = /^-?\s*(.+)\s+\|\s+(.+)\s+\|\s+(.+)\s+\|\s+(critical|core|advanced)$/;
+const REPLY_PAIR_LINE = /^-?\s*(.+?)\s*=>\s*(.+?)(?:\s*\|\s*(.+))?$/;
 
 function parseItems(lines: string[]): { items: CurriculumUnit["vocab"]; restIndex: number } {
   const items: CurriculumUnit["vocab"] = [];
@@ -44,6 +45,27 @@ function parseGrammar(lines: string[]): { items: GrammarItem[]; restIndex: numbe
   return { items, restIndex: i };
 }
 
+function parseReplyPairs(lines: string[]): { items: ReplyPair[]; restIndex: number } {
+  const items: ReplyPair[] = [];
+  let i = 0;
+  for (; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (line === "" || line.endsWith(":") || line.startsWith("##") || line.startsWith("Unit ")) {
+      break;
+    }
+    const match = REPLY_PAIR_LINE.exec(line);
+    if (match) {
+      const promptHanzi = match[1].trim();
+      const replyHanzi = match[2].trim();
+      const rationale = match[3]?.trim();
+      if (promptHanzi && replyHanzi) {
+        items.push({ promptHanzi, replyHanzi, rationale });
+      }
+    }
+  }
+  return { items, restIndex: i };
+}
+
 export function loadCurriculumFromFile(filePath: string): Curriculum {
   const abs = path.resolve(filePath);
   const raw = fs.readFileSync(abs, "utf8");
@@ -67,7 +89,16 @@ export function loadCurriculumFromFile(filePath: string): Curriculum {
         i += 1;
       }
 
-      const unit: CurriculumUnit = { title, topic, level, vocab: [], phrases: [], templates: [], grammar: [] };
+      const unit: CurriculumUnit = {
+        title,
+        topic,
+        level,
+        vocab: [],
+        phrases: [],
+        templates: [],
+        grammar: [],
+        replyPairs: []
+      };
 
       while (i < lines.length && !lines[i].trim().startsWith("## Unit") && !lines[i].trim().startsWith("Unit ")) {
         const section = lines[i].trim();
@@ -92,6 +123,12 @@ export function loadCurriculumFromFile(filePath: string): Curriculum {
         if (section === "Grammar:") {
           const parsed = parseGrammar(lines.slice(i + 1));
           unit.grammar = parsed.items;
+          i += parsed.restIndex + 1;
+          continue;
+        }
+        if (section === "ReplyPairs:") {
+          const parsed = parseReplyPairs(lines.slice(i + 1));
+          unit.replyPairs = parsed.items;
           i += parsed.restIndex + 1;
           continue;
         }

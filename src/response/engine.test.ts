@@ -33,4 +33,19 @@ describe("response engine", () => {
     const res = await generateResponse(new MockLlmAdapter(), "ni hao", capped);
     expect(res.usedLlm).toBe(false);
   });
+
+  it("uses cache hit before calling llm", async () => {
+    const cache = {
+      async get() {
+        return "缓存命中\nhuǎn cún mìng zhòng\ncache hit";
+      },
+      async set() {
+        return;
+      }
+    };
+    const res = await generateResponse(new MockLlmAdapter(), "ni hao", { ...baseContext, cache });
+    expect(res.fromCache).toBe(true);
+    expect(res.usedLlm).toBe(false);
+    expect(res.text).toContain("cache hit");
+  });
 });

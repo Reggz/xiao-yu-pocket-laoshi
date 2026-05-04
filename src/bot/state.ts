@@ -20,6 +20,8 @@ export type DrillState = {
   context?: {
     promptMeaning?: string;
     promptHanzi?: string;
+    answerMeaning?: string;
+    rationale?: string;
   };
 };
 
