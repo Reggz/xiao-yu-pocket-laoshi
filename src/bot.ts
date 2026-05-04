@@ -201,7 +201,9 @@ function initDrillSession(total: number, focus: DrillFocus, topic: string) {
       grammar: 0,
       complete_sentence: 0,
       reply_sentence: 0
-    }
+    },
+    askedKeys: [],
+    lastAskedKey: undefined
   };
 }
 
@@ -232,12 +234,24 @@ async function sendDrillSetupCount(ctx: any, userId: string, topic: string, focu
   });
 }
 
-function pickDrillByFocus(focus: DrillFocus, topic: string) {
+function pickDrillByFocus(focus: DrillFocus, topic: string, excludeKeys?: Set<string>) {
   const scopedTopic = topic === DRILL_ANY_TOPIC ? undefined : topic;
-  if (focus === "vocab") return buildMicroDrill(curriculum, { topic: scopedTopic });
-  if (focus === "grammar") return buildGrammarDrill(curriculum, { topic: scopedTopic });
-  if (focus === "complete_sentence") return buildCompleteSentenceDrill(curriculum, { topic: scopedTopic });
-  return buildReplySentenceDrill(curriculum, { topic: scopedTopic });
+  const options = { topic: scopedTopic, excludeKeys };
+  if (focus === "vocab") return buildMicroDrill(curriculum, options);
+  if (focus === "grammar") return buildGrammarDrill(curriculum, options);
+  if (focus === "complete_sentence") return buildCompleteSentenceDrill(curriculum, options);
+  return buildReplySentenceDrill(curriculum, options);
+}
+
+function pickAnyDrill(topic: string, excludeKeys?: Set<string>) {
+  const scopedTopic = topic === DRILL_ANY_TOPIC ? undefined : topic;
+  const options = { topic: scopedTopic, excludeKeys };
+  return (
+    buildMicroDrill(curriculum, options) ||
+    buildGrammarDrill(curriculum, options) ||
+    buildCompleteSentenceDrill(curriculum, options) ||
+    buildReplySentenceDrill(curriculum, options)
+  );
 }
 
 async function sendNextDrill(ctx: any, userId: string): Promise<void> {
@@ -245,14 +259,19 @@ async function sendNextDrill(ctx: any, userId: string): Promise<void> {
   const drillSession = session.drillSession;
   if (!drillSession || drillSession.remaining <= 0) return;
 
-  let question = pickDrillByFocus(drillSession.focus, drillSession.topic);
+  const asked = new Set(drillSession.askedKeys);
+  let question = pickDrillByFocus(drillSession.focus, drillSession.topic, asked);
+
   if (!question) {
-    const scopedTopic = drillSession.topic === DRILL_ANY_TOPIC ? undefined : drillSession.topic;
-    question =
-      buildMicroDrill(curriculum, { topic: scopedTopic }) ||
-      buildGrammarDrill(curriculum, { topic: scopedTopic }) ||
-      buildCompleteSentenceDrill(curriculum, { topic: scopedTopic }) ||
-      buildReplySentenceDrill(curriculum, { topic: scopedTopic });
+    question = pickAnyDrill(drillSession.topic, asked);
+  }
+
+  if (!question) {
+    question = pickDrillByFocus(drillSession.focus, drillSession.topic);
+  }
+
+  if (!question) {
+    question = pickAnyDrill(drillSession.topic);
   }
 
   if (!question) {
@@ -263,9 +282,22 @@ async function sendNextDrill(ctx: any, userId: string): Promise<void> {
     return;
   }
 
+  if (drillSession.lastAskedKey && question.key === drillSession.lastAskedKey) {
+    const avoidLast = new Set(drillSession.askedKeys);
+    avoidLast.add(drillSession.lastAskedKey);
+    const alternate = pickDrillByFocus(drillSession.focus, drillSession.topic, avoidLast) || pickAnyDrill(drillSession.topic, avoidLast);
+    if (alternate) question = alternate;
+  }
+
+  if (question.key) {
+    drillSession.askedKeys.push(question.key);
+    drillSession.lastAskedKey = question.key;
+  }
+
   setPendingDrill(userId, question);
   await ctx.reply(question.prompt, { reply_markup: buildDrillKeyboard(question.options) });
 }
+
 
 async function startDrillSession(
   ctx: any,
@@ -382,7 +414,7 @@ function extractGrammarAnchors(hanzi: string): string[] {
 
 function findExampleForGrammar(unit: CurriculumUnit, grammarHanzi: string): CurriculumItem | null {
   const anchors = extractGrammarAnchors(grammarHanzi);
-  if (!anchors.length) return findExampleForUnit(unit);
+  if (!anchors.length) return null;
 
   for (const anchor of anchors) {
     const template = unit.templates.find((t) => t.hanzi.includes(anchor));
@@ -391,37 +423,83 @@ function findExampleForGrammar(unit: CurriculumUnit, grammarHanzi: string): Curr
     if (phrase) return phrase;
   }
 
-  return findExampleForUnit(unit);
+  return null;
 }
 
-function buildDrillExplanation(drill: { type: string; target?: string }): string {
+function findRelatedExampleForItem(unit: CurriculumUnit, excludeHanzi: string): CurriculumItem | null {
+  const pool = [...unit.templates, ...unit.phrases].filter((item) => item.hanzi !== excludeHanzi);
+  if (!pool.length) return null;
+  return pool[0];
+}
+
+function buildDrillExplanation(drill: {
+  type: string;
+  target?: string;
+  prompt: string;
+  answer: string;
+  context?: { promptMeaning?: string; promptHanzi?: string };
+}): string {
   if (!drill.target) return "";
+
   if (drill.type === "grammar") {
     const found = findGrammarTarget(drill.target);
     if (!found) return "";
+
     const header = `${found.item.hanzi}\n${toToneMarks(found.item.pinyin)}\n${found.item.english}`;
+    const why = drill.context?.promptMeaning
+      ? `Why this is correct: it matches “${drill.context.promptMeaning}”.`
+      : "Why this is correct: it matches the grammar meaning in the question.";
+
     const example = findExampleForGrammar(found.unit, found.item.hanzi);
-    if (!example) return header;
-    return `${header}\n\nExample:\n${example.hanzi}\n${toToneMarks(example.pinyin)}\n${example.english}`;
+    if (!example) {
+      return `${header}\n\n${why}\n\nExample: (No direct sentence in curriculum for this grammar label yet.)`;
+    }
+
+    return `${header}\n\n${why}\n\nExample:\n${example.hanzi}\n${toToneMarks(example.pinyin)}\n${example.english}`;
   }
 
   const found = findItemTarget(drill.target);
   if (!found) return "";
+
   const header = `${found.item.hanzi}\n${toToneMarks(found.item.pinyin)}\n${found.item.english}`;
-  const example = findExampleForHanzi(found.item.hanzi) ?? findExampleForUnit(found.unit);
-  if (!example) {
-    const fallbackPinyin = toToneMarks(`wo3 xi3 huan ${found.item.pinyin}`);
-    return `${header}\n\nExample:\n我喜欢${found.item.hanzi}\n${fallbackPinyin}\nI like ${found.item.english}`;
+  const why = drill.context?.promptMeaning
+    ? `Why this is correct: it means “${drill.context.promptMeaning}”.`
+    : "Why this is correct: this option best matches the prompt.";
+
+  if (drill.type === "complete_sentence" || drill.type === "reply_sentence") {
+    const related = findRelatedExampleForItem(found.unit, found.item.hanzi);
+    if (!related) {
+      return `${header}\n\n${why}`;
+    }
+    return `${header}\n\n${why}\n\nRelated sentence:\n${related.hanzi}\n${toToneMarks(related.pinyin)}\n${related.english}`;
   }
-  return `${header}\n\nExample:\n${example.hanzi}\n${toToneMarks(example.pinyin)}\n${example.english}`;
+
+  const example = findExampleForHanzi(found.item.hanzi);
+  if (!example || example.hanzi === found.item.hanzi) {
+    const fallbackPinyin = toToneMarks(`wo3 xi3 huan ${found.item.pinyin}`);
+    return `${header}\n\n${why}\n\nExample:\n我喜欢${found.item.hanzi}\n${fallbackPinyin}\nI like ${found.item.english}`;
+  }
+
+  return `${header}\n\n${why}\n\nExample:\n${example.hanzi}\n${toToneMarks(example.pinyin)}\n${example.english}`;
 }
 
-function buildDrillFeedback(answer: string, drill: { type: string; target?: string; answer: string }, correct: boolean): string {
+function buildDrillFeedback(
+  answer: string,
+  drill: {
+    type: string;
+    target?: string;
+    answer: string;
+    prompt: string;
+    context?: { promptMeaning?: string; promptHanzi?: string };
+  },
+  correct: boolean
+): string {
   const status = correct ? "Correct!" : `Not quite. Correct answer: ${drill.answer}`;
   const selection = `You chose: ${answer}`;
   const explanation = buildDrillExplanation(drill);
   return explanation ? `${status}\n${selection}\n\n${explanation}` : `${status}\n${selection}`;
 }
+
 function buildLlmPolicy() {
   return { maxCallsPerSession: 3, disableCaps: config.llmDisableCaps ?? false };
 }

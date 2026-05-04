@@ -4,15 +4,21 @@ export type DrillType = "vocab" | "grammar" | "complete_sentence" | "reply_sente
 
 export type DrillQuestion = {
   id: string;
+  key: string;
   prompt: string;
   options: string[];
   answer: string;
   type: DrillType;
   target?: string;
+  context?: {
+    promptMeaning?: string;
+    promptHanzi?: string;
+  };
 };
 
 export type DrillBuildOptions = {
   topic?: string;
+  excludeKeys?: Set<string>;
 };
 
 function pickRandom<T>(items: T[]): T | null {
@@ -77,11 +83,17 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
+function isExcluded(key: string, options?: DrillBuildOptions): boolean {
+  if (!options?.excludeKeys) return false;
+  return options.excludeKeys.has(key);
+}
+
 export function buildMicroDrill(curriculum: Curriculum, options?: DrillBuildOptions): DrillQuestion | null {
   const items = collectVocab(curriculum, options);
   if (items.length < 4) return null;
 
-  const target = pickRandom(items);
+  const candidates = items.filter((item) => !isExcluded(`vocab:${item.hanzi}`, options));
+  const target = pickRandom(candidates.length ? candidates : items);
   if (!target) return null;
 
   const distractors = items.filter((i) => i.english !== target.english);
@@ -95,11 +107,13 @@ export function buildMicroDrill(curriculum: Curriculum, options?: DrillBuildOpti
 
   return {
     id: `micro_${Date.now()}`,
+    key: `vocab:${target.hanzi}`,
     prompt: `What does “${target.hanzi}” mean?`,
     options: shuffle(Array.from(optionsSet)),
     answer: target.english,
     type: "vocab",
-    target: target.hanzi
+    target: target.hanzi,
+    context: { promptMeaning: target.english }
   };
 }
 
@@ -107,7 +121,8 @@ export function buildGrammarDrill(curriculum: Curriculum, options?: DrillBuildOp
   const items = collectGrammar(curriculum, options);
   if (items.length < 4) return null;
 
-  const target = pickRandom(items);
+  const candidates = items.filter((item) => !isExcluded(`grammar:${item.hanzi}`, options));
+  const target = pickRandom(candidates.length ? candidates : items);
   if (!target) return null;
 
   const distractors = items.filter((i) => i.hanzi !== target.hanzi);
@@ -121,11 +136,13 @@ export function buildGrammarDrill(curriculum: Curriculum, options?: DrillBuildOp
 
   return {
     id: `grammar_${Date.now()}`,
+    key: `grammar:${target.hanzi}`,
     prompt: `Which grammar matches “${target.english}”?`,
     options: shuffle(Array.from(optionsSet)),
     answer: target.hanzi,
     type: "grammar",
-    target: target.hanzi
+    target: target.hanzi,
+    context: { promptMeaning: target.english }
   };
 }
 
@@ -133,7 +150,8 @@ export function buildCompleteSentenceDrill(curriculum: Curriculum, options?: Dri
   const items = collectSentences(curriculum, options).filter((i) => i.english.length > 0);
   if (items.length < 4) return null;
 
-  const target = pickRandom(items);
+  const candidates = items.filter((item) => !isExcluded(`sentence:${item.hanzi}`, options));
+  const target = pickRandom(candidates.length ? candidates : items);
   if (!target) return null;
 
   const distractors = items.filter((i) => i.hanzi !== target.hanzi);
@@ -147,11 +165,13 @@ export function buildCompleteSentenceDrill(curriculum: Curriculum, options?: Dri
 
   return {
     id: `sentence_${Date.now()}`,
+    key: `sentence:${target.hanzi}`,
     prompt: `Which sentence means: “${target.english}”?`,
     options: shuffle(Array.from(optionsSet)),
     answer: target.hanzi,
     type: "complete_sentence",
-    target: target.hanzi
+    target: target.hanzi,
+    context: { promptMeaning: target.english }
   };
 }
 
@@ -159,7 +179,8 @@ export function buildReplySentenceDrill(curriculum: Curriculum, options?: DrillB
   const pairs = collectReplyPairs(curriculum, options);
   if (pairs.length < 4) return null;
 
-  const target = pickRandom(pairs);
+  const candidates = pairs.filter((pair) => !isExcluded(`reply:${pair.prompt.hanzi}->${pair.reply.hanzi}`, options));
+  const target = pickRandom(candidates.length ? candidates : pairs);
   if (!target) return null;
 
   const distractors = pairs.filter((p) => p.reply.hanzi !== target.reply.hanzi);
@@ -173,10 +194,15 @@ export function buildReplySentenceDrill(curriculum: Curriculum, options?: DrillB
 
   return {
     id: `reply_${Date.now()}`,
+    key: `reply:${target.prompt.hanzi}->${target.reply.hanzi}`,
     prompt: `Choose the best reply to:\n${target.prompt.hanzi}`,
     options: shuffle(Array.from(optionsSet)),
     answer: target.reply.hanzi,
     type: "reply_sentence",
-    target: target.reply.hanzi
+    target: target.reply.hanzi,
+    context: {
+      promptHanzi: target.prompt.hanzi,
+      promptMeaning: target.prompt.english
+    }
   };
 }
