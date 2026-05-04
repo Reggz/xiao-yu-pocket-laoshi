@@ -271,19 +271,49 @@ async function sendNextDrill(ctx: any, userId: string): Promise<void> {
   let question = pickDrillByFocus(drillSession.focus, drillSession.topic, asked);
 
   if (!question) {
-    question = pickAnyDrill(drillSession.topic, asked);
-  }
-
-  if (!question) {
     question = pickDrillByFocus(drillSession.focus, drillSession.topic);
   }
 
   if (!question) {
-    question = pickAnyDrill(drillSession.topic);
-  }
+    if (drillSession.focus === "reply_sentence" && llmAdapter) {
+      try {
+        const suggestion = await generateReplyPairSuggestion(llmAdapter, curriculum);
+        if (suggestion) {
+          const cacheKey = buildReviewGenerationCacheKey({
+            promptHanzi: suggestion.promptHanzi,
+            topic: suggestion.topic,
+            level: suggestion.level
+          });
+          const cached = await getCachedLlmContent(config.databaseUrl, cacheKey, "review_generate");
+          if (!cached) {
+            await upsertCachedLlmContent(
+              config.databaseUrl,
+              cacheKey,
+              JSON.stringify(suggestion),
+              "review_generate",
+              { source: "auto_reply_gap" }
+            );
+            await enqueueCurriculumReviewItem(config.databaseUrl, {
+              source: "llm",
+              promptHanzi: suggestion.promptHanzi,
+              promptPinyin: suggestion.promptPinyin,
+              promptEnglish: suggestion.promptEnglish,
+              replyHanzi: suggestion.replyHanzi,
+              replyPinyin: suggestion.replyPinyin,
+              replyEnglish: suggestion.replyEnglish,
+              rationale: suggestion.rationale,
+              topic: suggestion.topic,
+              level: suggestion.level,
+              rawPayload: suggestion as unknown as Record<string, unknown>
+            });
+          }
+        }
+      } catch {
+        // best-effort queueing only
+      }
+    }
 
-  if (!question) {
-    await ctx.reply("No drills available yet for this selection.");
+    await ctx.reply("No drills available yet for this focus/topic. Please pick another topic or focus.");
     setDrillSession(userId, undefined);
     setDrillSetup(userId, undefined);
     await sendReturnMenu(ctx, userId);
@@ -293,7 +323,7 @@ async function sendNextDrill(ctx: any, userId: string): Promise<void> {
   if (drillSession.lastAskedKey && question.key === drillSession.lastAskedKey) {
     const avoidLast = new Set(drillSession.askedKeys);
     avoidLast.add(drillSession.lastAskedKey);
-    const alternate = pickDrillByFocus(drillSession.focus, drillSession.topic, avoidLast) || pickAnyDrill(drillSession.topic, avoidLast);
+    const alternate = pickDrillByFocus(drillSession.focus, drillSession.topic, avoidLast);
     if (alternate) question = alternate;
   }
 
