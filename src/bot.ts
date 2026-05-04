@@ -57,7 +57,8 @@ import {
   buildCompleteSentenceDrill,
   buildGrammarDrill,
   buildMicroDrill,
-  buildReplySentenceDrill
+  buildReplySentenceDrill,
+  type DrillQuestion
 } from "./drills/quick";
 import { placementQuestions, evaluatePlacementAnswer, scorePlacement } from "./onboarding/placement";
 
@@ -262,6 +263,132 @@ function pickAnyDrill(topic: string, excludeKeys?: Set<string>) {
   );
 }
 
+function pickRandomItem<T>(items: T[]): T | null {
+  if (!items.length) return null;
+  return items[Math.floor(Math.random() * items.length)] ?? null;
+}
+
+function collectTopicSentences(topic: string): CurriculumItem[] {
+  const units = topic === DRILL_ANY_TOPIC
+    ? curriculum.units
+    : curriculum.units.filter((u) => u.topic.toLowerCase() === topic.toLowerCase());
+
+  const out: CurriculumItem[] = [];
+  const seen = new Set<string>();
+  for (const unit of units) {
+    for (const item of [...unit.phrases, ...unit.templates]) {
+      if (seen.has(item.hanzi)) continue;
+      seen.add(item.hanzi);
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+function parseReplyChoice(raw: string): { answerHanzi: string; rationale: string } | null {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+
+  try {
+    const parsed = JSON.parse(raw.slice(start, end + 1)) as {
+      answer_hanzi?: string;
+      rationale?: string;
+    };
+    const answerHanzi = parsed.answer_hanzi?.trim() ?? "";
+    const rationale = parsed.rationale?.trim() ?? "";
+    if (!answerHanzi) return null;
+    return { answerHanzi, rationale };
+  } catch {
+    return null;
+  }
+}
+
+async function buildHybridReplyDrill(topic: string, excludeKeys?: Set<string>): Promise<DrillQuestion | null> {
+  if (!llmAdapter) return null;
+
+  const sentencePool = collectTopicSentences(topic);
+  if (sentencePool.length < 2) return null;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const prompt = pickRandomItem(sentencePool);
+    if (!prompt) return null;
+
+    const optionPool = sentencePool.filter((s) => s.hanzi !== prompt.hanzi);
+    const targetCount = Math.min(4, optionPool.length);
+    if (targetCount < 2) return null;
+
+    const optionsPicked: CurriculumItem[] = [];
+    const used = new Set<string>();
+    while (optionsPicked.length < targetCount) {
+      const cand = pickRandomItem(optionPool);
+      if (!cand || used.has(cand.hanzi)) continue;
+      used.add(cand.hanzi);
+      optionsPicked.push(cand);
+    }
+
+    const optionRows = optionsPicked.map((o, i) => `${i + 1}. ${o.hanzi} | ${o.pinyin} | ${o.english}`).join("\n");
+    const cacheKey = `reply_drill|${topic}|${prompt.hanzi}|${optionsPicked.map((o) => o.hanzi).sort().join("|")}`;
+
+    let chosen = await getCachedLlmContent(config.databaseUrl, cacheKey, "reply_drill");
+    let parsed = chosen ? parseReplyChoice(chosen) : null;
+
+    if (!parsed) {
+      const llmPrompt =
+        "Select the best reply from provided options for beginner Mandarin learning.\n" +
+        "Return strict JSON only: {\"answer_hanzi\":\"...\",\"rationale\":\"...\"}.\n" +
+        "answer_hanzi must exactly match one option hanzi.\n" +
+        `Prompt: ${prompt.hanzi} | ${prompt.pinyin} | ${prompt.english}\n` +
+        "Options:\n" + optionRows;
+
+      const resp = await llmAdapter.generate({ prompt: llmPrompt, timeoutMs: 6000 });
+      parsed = parseReplyChoice(resp.text);
+      if (parsed) {
+        await upsertCachedLlmContent(
+          config.databaseUrl,
+          cacheKey,
+          JSON.stringify({ answer_hanzi: parsed.answerHanzi, rationale: parsed.rationale }),
+          "reply_drill",
+          { topic, prompt: prompt.hanzi }
+        );
+      }
+    }
+
+    if (!parsed) continue;
+
+    const answerItem = optionsPicked.find((o) => o.hanzi === parsed?.answerHanzi);
+    if (!answerItem) continue;
+
+    const key = `reply_llm:${prompt.hanzi}->${answerItem.hanzi}`;
+    if (excludeKeys?.has(key)) continue;
+
+    const optionHanzi = optionsPicked.map((o) => o.hanzi);
+    for (let i = optionHanzi.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [optionHanzi[i], optionHanzi[j]] = [optionHanzi[j], optionHanzi[i]];
+    }
+
+    return {
+      id: `reply_llm_${Date.now()}`,
+      key,
+      prompt: `Choose the best reply to:\n${prompt.hanzi}`,
+      options: optionHanzi,
+      answer: answerItem.hanzi,
+      type: "reply_sentence",
+      target: answerItem.hanzi,
+      context: {
+        promptHanzi: prompt.hanzi,
+        promptMeaning: prompt.english,
+        answerMeaning: answerItem.english,
+        rationale: parsed.rationale || "Best contextual reply among options."
+      }
+    };
+  }
+
+  return null;
+}
+
+
 async function sendNextDrill(ctx: any, userId: string): Promise<void> {
   const session = getSession(userId);
   const drillSession = session.drillSession;
@@ -270,8 +397,16 @@ async function sendNextDrill(ctx: any, userId: string): Promise<void> {
   const asked = new Set(drillSession.askedKeys);
   let question = pickDrillByFocus(drillSession.focus, drillSession.topic, asked);
 
+  if (!question && drillSession.focus === "reply_sentence") {
+    question = await buildHybridReplyDrill(drillSession.topic, asked);
+  }
+
   if (!question) {
     question = pickDrillByFocus(drillSession.focus, drillSession.topic);
+  }
+
+  if (!question && drillSession.focus === "reply_sentence") {
+    question = await buildHybridReplyDrill(drillSession.topic);
   }
 
   if (!question) {
@@ -323,7 +458,10 @@ async function sendNextDrill(ctx: any, userId: string): Promise<void> {
   if (drillSession.lastAskedKey && question.key === drillSession.lastAskedKey) {
     const avoidLast = new Set(drillSession.askedKeys);
     avoidLast.add(drillSession.lastAskedKey);
-    const alternate = pickDrillByFocus(drillSession.focus, drillSession.topic, avoidLast);
+    let alternate = pickDrillByFocus(drillSession.focus, drillSession.topic, avoidLast);
+    if (!alternate && drillSession.focus === "reply_sentence") {
+      alternate = await buildHybridReplyDrill(drillSession.topic, avoidLast);
+    }
     if (alternate) question = alternate;
   }
 

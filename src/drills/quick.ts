@@ -26,7 +26,7 @@ export type DrillBuildOptions = {
 function pickRandom<T>(items: T[]): T | null {
   if (!items.length) return null;
   const idx = Math.floor(Math.random() * items.length);
-  return items[idx];
+  return items[idx] ?? null;
 }
 
 function getUnits(curriculum: Curriculum, options?: DrillBuildOptions) {
@@ -158,7 +158,7 @@ export function buildGrammarDrill(curriculum: Curriculum, options?: DrillBuildOp
 
 export function buildCompleteSentenceDrill(curriculum: Curriculum, options?: DrillBuildOptions): DrillQuestion | null {
   const items = collectSentences(curriculum, options).filter((i) => i.english.length > 0);
-  if (items.length < 4) return null;
+  if (items.length < 2) return null;
 
   const candidates = items.filter((item) => !isExcluded(`sentence:${item.hanzi}`, options));
   const target = pickRandom(candidates.length ? candidates : items);
@@ -166,12 +166,15 @@ export function buildCompleteSentenceDrill(curriculum: Curriculum, options?: Dri
 
   const distractors = items.filter((i) => i.hanzi !== target.hanzi);
   const optionsSet = new Set<string>();
+  const targetOptionCount = Math.min(4, items.length);
   optionsSet.add(target.hanzi);
-  while (optionsSet.size < 4) {
+  while (optionsSet.size < targetOptionCount) {
     const d = pickRandom(distractors);
     if (!d) break;
     optionsSet.add(d.hanzi);
   }
+
+  if (optionsSet.size < 2) return null;
 
   return {
     id: `sentence_${Date.now()}`,
@@ -187,20 +190,26 @@ export function buildCompleteSentenceDrill(curriculum: Curriculum, options?: Dri
 
 export function buildReplySentenceDrill(curriculum: Curriculum, options?: DrillBuildOptions): DrillQuestion | null {
   const pairs = collectReplyPairs(curriculum, options);
-  if (pairs.length < 4) return null;
+  if (pairs.length < 1) return null;
+
+  const sentencePool = collectSentences(curriculum, options);
+  if (sentencePool.length < 2) return null;
 
   const candidates = pairs.filter((pair) => !isExcluded(`reply:${pair.prompt.hanzi}->${pair.reply.hanzi}`, options));
   const target = pickRandom(candidates.length ? candidates : pairs);
   if (!target) return null;
 
-  const distractors = pairs.filter((p) => p.reply.hanzi !== target.reply.hanzi);
+  const distractorPool = sentencePool.filter((s) => s.hanzi !== target.reply.hanzi);
   const optionsSet = new Set<string>();
+  const targetOptionCount = Math.min(4, sentencePool.length);
   optionsSet.add(target.reply.hanzi);
-  while (optionsSet.size < 4) {
-    const d = pickRandom(distractors);
+  while (optionsSet.size < targetOptionCount) {
+    const d = pickRandom(distractorPool);
     if (!d) break;
-    optionsSet.add(d.reply.hanzi);
+    optionsSet.add(d.hanzi);
   }
+
+  if (optionsSet.size < 2) return null;
 
   return {
     id: `reply_${Date.now()}`,
